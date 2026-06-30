@@ -15,6 +15,7 @@ const navItems = [
   { href: '/regras', icon: '⚙️', label: 'Regras' },
   { href: '/metas', icon: '🎯', label: 'Metas' },
   { href: '/relatorios', icon: '📊', label: 'Relatórios' },
+  { href: '/usuarios', icon: '🔑', label: 'Usuários' },
 ]
 
 export default function Sidebar() {

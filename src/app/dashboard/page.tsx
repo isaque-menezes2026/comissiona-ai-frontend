@@ -5,29 +5,40 @@ import { useAuthStore } from '@/store/auth.store'
 import StatCard from '@/components/ui/StatCard'
 import Badge from '@/components/ui/Badge'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import { money, date, commissionStatus, saleStatus } from '@/lib/formatters'
+import { money, date, monthYear, commissionStatus, saleStatus, forecastStatusLabel } from '@/lib/formatters'
 
 export default function DashboardPage() {
   const { user } = useAuthStore()
   const [data, setData] = useState<any>(null)
   const [sales, setSales] = useState<any[]>([])
+  const [mySummary, setMySummary] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    Promise.all([
+    const calls: Promise<any>[] = [
       api.get('/reports/dashboard'),
       api.get('/sales?limit=5'),
-    ]).then(([r, s]) => {
+    ]
+    if (user?.sellerId) calls.push(api.get('/commissions/my-summary'))
+
+    Promise.all(calls).then(([r, s, my]) => {
       setData(r.data)
       setSales(Array.isArray(s.data) ? s.data.slice(0, 5) : [])
+      if (my) setMySummary(my.data)
     }).finally(() => setLoading(false))
-  }, [])
+  }, [user?.sellerId])
 
   if (loading) return <LoadingSpinner />
 
   const predicted = Number(data?.predicted?._sum?.amount || 0)
   const released = Number(data?.released?._sum?.amount || 0)
   const paid = Number(data?.paid?._sum?.amount || 0)
+
+  // Próximas comissões previstas a liberar (somente para vendedor), ordenadas pela data prevista
+  const upcoming = (mySummary?.recent || [])
+    .filter((c: any) => c.status === 'PREDICTED' && c.dateExpectedRelease)
+    .sort((a: any, b: any) => new Date(a.dateExpectedRelease).getTime() - new Date(b.dateExpectedRelease).getTime())
+    .slice(0, 5)
 
   return (
     <div>
@@ -57,6 +68,33 @@ export default function DashboardPage() {
             </div>
             <a href="/pagamentos" className="ml-auto btn-primary text-sm py-2">Gerar Lote</a>
           </div>
+        </div>
+      )}
+
+      {user?.sellerId && (
+        <div className="card p-6 mb-8">
+          <h2 className="text-base font-semibold text-gray-900 mb-1">Suas próximas comissões</h2>
+          <p className="text-xs text-gray-400 mb-4">Quanto, por qual venda, qual produto, qual regra e quando você deve receber</p>
+          {upcoming.length === 0 ? (
+            <div className="text-center py-6 text-gray-400 text-sm">Nenhuma comissão prevista no momento.</div>
+          ) : (
+            <div className="space-y-3">
+              {upcoming.map((c: any) => (
+                <div key={c.id} className="flex items-center justify-between border border-gray-100 rounded-xl px-4 py-3">
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">{money(c.amount)} — {c.saleItem?.product?.name || 'Produto'}</div>
+                    <div className="text-xs text-gray-500">Cliente: {c.sale?.customer?.companyName || '—'}</div>
+                    <div className="text-xs text-gray-400">Motivo: {c.forecastReason || '—'}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs font-medium text-gray-900">Previsão: {monthYear(c.expectedPaymentCompetence)}</div>
+                    <div className="text-xs text-gray-400">{date(c.dateExpectedRelease)}</div>
+                    <div className="text-xs text-blue-500 mt-0.5">{forecastStatusLabel[c.forecastStatus] || 'Aguardando liberação'}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

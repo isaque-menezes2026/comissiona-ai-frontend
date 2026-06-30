@@ -14,6 +14,11 @@ const periodTypes = [
   { value: 'yearly', label: 'Anual' },
 ]
 
+const goalTypes = [
+  { value: 'revenue', label: 'Receita (R$)' },
+  { value: 'quantity', label: 'Quantidade de vendas' },
+]
+
 function getCurrentPeriodKey(type: string) {
   const now = new Date()
   const year = now.getFullYear()
@@ -39,16 +44,26 @@ function periodOptions(type: string, year: number) {
   return []
 }
 
+function formatAchieved(value: number, type: string) {
+  if (type === 'quantity') return `${value} venda${value === 1 ? '' : 's'}`
+  return money(value)
+}
+
+const emptyForm = (periodType: string, periodKey: string) => ({
+  periodType, periodKey, type: 'revenue', productId: '', targetValue: '', bonusAmount: '',
+})
+
 export default function MetasPage() {
   const [goals, setGoals] = useState<any[]>([])
   const [products, setProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [periodType, setPeriodType] = useState('monthly')
   const [periodKey, setPeriodKey] = useState(getCurrentPeriodKey('monthly'))
   const [year] = useState(new Date().getFullYear())
-  const [form, setForm] = useState<any>({ periodType: 'monthly', periodKey: getCurrentPeriodKey('monthly'), type: 'revenue' })
+  const [form, setForm] = useState<any>(emptyForm('monthly', getCurrentPeriodKey('monthly')))
 
   const load = () => {
     setLoading(true)
@@ -66,12 +81,40 @@ export default function MetasPage() {
     setPeriodKey(getCurrentPeriodKey(type))
   }
 
+  const openCreateModal = () => {
+    setEditingId(null)
+    setForm(emptyForm(periodType, periodKey))
+    setShowModal(true)
+  }
+
+  const openEditModal = (g: any) => {
+    setEditingId(g.id)
+    setForm({
+      periodType: g.periodType,
+      periodKey: g.periodKey,
+      type: g.type || 'revenue',
+      productId: g.productId || '',
+      targetValue: g.targetValue,
+      bonusAmount: g.bonusAmount || '',
+    })
+    setShowModal(true)
+  }
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true)
     try {
-      await api.post('/goals', { ...form, periodType, periodKey })
+      const payload = {
+        ...form,
+        productId: form.productId || null,
+        targetValue: parseFloat(form.targetValue),
+        bonusAmount: form.bonusAmount ? parseFloat(form.bonusAmount) : null,
+      }
+      if (editingId) {
+        await api.patch(`/goals/${editingId}`, payload)
+      } else {
+        await api.post('/goals', payload)
+      }
       setShowModal(false)
-      setForm({ periodType, periodKey, type: 'revenue' })
       load()
     } catch (err: any) { alert(err.response?.data?.message || 'Erro') }
     finally { setSaving(false) }
@@ -87,7 +130,7 @@ export default function MetasPage() {
 
   return (
     <div>
-      <PageHeader title="Metas" description="Metas de receita por produto e período" action={<button onClick={() => setShowModal(true)} className="btn-primary">+ Nova Meta</button>} />
+      <PageHeader title="Metas" description="Metas de receita ou quantidade por produto e período" action={<button onClick={openCreateModal} className="btn-primary">+ Nova Meta</button>} />
 
       <div className="flex items-center gap-3 mb-6">
         {periodTypes.map(pt => (
@@ -115,6 +158,9 @@ export default function MetasPage() {
                     <div className="flex items-center gap-2">
                       {g.product?.color && <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: g.product.color }} />}
                       <div className="font-semibold text-gray-900">{g.product?.name || 'Meta Geral'}</div>
+                      <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+                        {g.type === 'quantity' ? 'Quantidade' : 'Receita'}
+                      </span>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
@@ -122,15 +168,16 @@ export default function MetasPage() {
                       <div className="text-xl font-bold text-gray-900">{(g.percentage || 0).toFixed(0)}%</div>
                       {pct >= 100 && <div className="text-xs text-green-600">Meta atingida!</div>}
                     </div>
-                    <button onClick={() => handleDelete(g.id)} className="text-gray-300 hover:text-red-500 text-sm">×</button>
+                    <button onClick={() => openEditModal(g)} className="text-gray-300 hover:text-blue-500 text-sm" title="Editar">✎</button>
+                    <button onClick={() => handleDelete(g.id)} className="text-gray-300 hover:text-red-500 text-sm" title="Excluir">×</button>
                   </div>
                 </div>
                 <div className="w-full bg-gray-100 rounded-full h-2.5 mb-3">
                   <div className={`h-2.5 rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
                 </div>
                 <div className="flex justify-between text-sm text-gray-500">
-                  <span>Realizado: <strong className="text-gray-900">{money(g.achieved)}</strong></span>
-                  <span>Meta: <strong className="text-gray-900">{money(g.targetValue)}</strong></span>
+                  <span>Realizado: <strong className="text-gray-900">{formatAchieved(g.achieved, g.type)}</strong></span>
+                  <span>Meta: <strong className="text-gray-900">{formatAchieved(Number(g.targetValue), g.type)}</strong></span>
                 </div>
                 {g.bonusAmount && (
                   <div className="mt-3 text-xs bg-green-50 text-green-700 px-3 py-2 rounded-lg">
@@ -143,30 +190,36 @@ export default function MetasPage() {
         </div>
       )}
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title="Nova Meta">
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Editar Meta' : 'Nova Meta'}>
         <form onSubmit={handleSave} className="space-y-4">
           <div>
             <label className="label">Produto (deixe em branco para meta geral)</label>
-            <select className="input" value={form.productId || ''} onChange={e => setForm((f: any) => ({...f, productId: e.target.value || null}))}>
+            <select className="input" value={form.productId || ''} onChange={e => setForm((f: any) => ({...f, productId: e.target.value}))}>
               <option value="">Meta Geral (sem produto)</option>
               {products.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
               {products.flatMap((p: any) => p.modules || []).map((m: any) => <option key={m.id} value={m.id}>↳ {m.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="label">Período: {periodTypes.find(p => p.value === periodType)?.label} — {periodOptions(periodType, year).find(o => o.value === periodKey)?.label}</label>
+            <label className="label">Tipo de meta *</label>
+            <select className="input" value={form.type} onChange={e => setForm((f: any) => ({...f, type: e.target.value}))}>
+              {goalTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
           </div>
           <div>
-            <label className="label">Meta de Receita (R$) *</label>
-            <input type="number" className="input" min={0} step={0.01} value={form.targetValue || ''} onChange={e => setForm((f: any) => ({...f, targetValue: parseFloat(e.target.value)}))} required />
+            <label className="label">Período: {periodTypes.find(p => p.value === form.periodType)?.label} — {periodOptions(form.periodType, year).find(o => o.value === form.periodKey)?.label}</label>
+          </div>
+          <div>
+            <label className="label">{form.type === 'quantity' ? 'Meta de Quantidade (nº de vendas) *' : 'Meta de Receita (R$) *'}</label>
+            <input type="number" className="input" min={0} step={form.type === 'quantity' ? 1 : 0.01} value={form.targetValue} onChange={e => setForm((f: any) => ({...f, targetValue: e.target.value}))} required />
           </div>
           <div>
             <label className="label">Bônus ao atingir (R$, opcional)</label>
-            <input type="number" className="input" min={0} step={0.01} value={form.bonusAmount || ''} onChange={e => setForm((f: any) => ({...f, bonusAmount: parseFloat(e.target.value)}))} />
+            <input type="number" className="input" min={0} step={0.01} value={form.bonusAmount} onChange={e => setForm((f: any) => ({...f, bonusAmount: e.target.value}))} />
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setShowModal(false)} className="btn-secondary flex-1">Cancelar</button>
-            <button type="submit" disabled={saving} className="btn-primary flex-1">{saving ? 'Salvando...' : 'Criar Meta'}</button>
+            <button type="submit" disabled={saving} className="btn-primary flex-1">{saving ? 'Salvando...' : editingId ? 'Salvar alterações' : 'Criar Meta'}</button>
           </div>
         </form>
       </Modal>

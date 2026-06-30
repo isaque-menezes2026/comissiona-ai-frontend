@@ -7,7 +7,7 @@ import Table, { Tr, Td } from '@/components/ui/Table'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
 import StatCard from '@/components/ui/StatCard'
-import { money, date, monthYear, commissionStatus, commissionType } from '@/lib/formatters'
+import { money, date, monthYear, commissionStatus, commissionType, forecastStatusLabel } from '@/lib/formatters'
 
 export default function ComissoesPage() {
   const [commissions, setCommissions] = useState<any[]>([])
@@ -78,13 +78,17 @@ export default function ComissoesPage() {
                   <Td><div className="font-medium">{bene}</div></Td>
                   <Td><div className="text-sm text-gray-600">{c.saleItem?.product?.name || '—'}</div></Td>
                   <Td><div className="text-sm text-gray-500">{c.sale?.customer?.companyName || '—'}</div></Td>
-                  <Td><div className="text-xs text-gray-400">{commissionType[c.commissionType] || c.commissionType}</div></Td>
+                  <Td>
+                    <div className="text-xs text-gray-400">{commissionType[c.commissionType] || c.commissionType}</div>
+                    {c.rule?.name && <div className="text-xs text-gray-300">{c.rule.name}</div>}
+                  </Td>
                   <Td><div className="font-semibold text-gray-900">{money(c.amount)}</div></Td>
                   <Td>
                     {c.dateExpectedRelease ? (
                       <div>
-                        <div className="text-xs font-medium">{date(c.dateExpectedRelease)}</div>
-                        <div className="text-xs text-gray-400">{c.forecastReason}</div>
+                        <div className="text-xs font-medium text-gray-900">{date(c.dateExpectedRelease)} <span className="text-gray-400">({monthYear(c.expectedPaymentCompetence)})</span></div>
+                        <div className="text-xs text-gray-500">{c.forecastReason}</div>
+                        {c.forecastStatus && <div className="text-xs text-blue-500">{forecastStatusLabel[c.forecastStatus] || c.forecastStatus}</div>}
                       </div>
                     ) : <span className="text-gray-300">—</span>}
                   </Td>

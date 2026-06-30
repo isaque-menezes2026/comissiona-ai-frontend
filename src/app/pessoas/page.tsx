@@ -12,6 +12,7 @@ export default function PessoasPage() {
   const [data, setData] = useState<any>({ sellers: [], partners: [], employees: [] })
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<any>({})
 
@@ -24,13 +25,36 @@ export default function PessoasPage() {
 
   useEffect(() => { load() }, [])
 
+  const openCreateModal = () => {
+    setEditingId(null)
+    setForm({ active: true })
+    setShowModal(true)
+  }
+
+  const openEditModal = (item: any) => {
+    setEditingId(item.id)
+    setForm({ ...item })
+    setShowModal(true)
+  }
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true)
     try {
-      await api.post(`/people/${tab}`, form)
+      if (editingId) {
+        await api.patch(`/people/${tab}/${editingId}`, form)
+      } else {
+        await api.post(`/people/${tab}`, form)
+      }
       setShowModal(false); setForm({}); load()
     } catch (err: any) { alert(err.response?.data?.message || 'Erro') }
     finally { setSaving(false) }
+  }
+
+  const toggleActive = async (item: any) => {
+    try {
+      await api.patch(`/people/${tab}/${item.id}`, { active: !item.active })
+      load()
+    } catch (err: any) { alert(err.response?.data?.message || 'Erro') }
   }
 
   const tabs = [
@@ -43,7 +67,7 @@ export default function PessoasPage() {
 
   return (
     <div>
-      <PageHeader title="Pessoas" description="Vendedores, parceiros e colaboradores indicadores" action={<button onClick={() => setShowModal(true)} className="btn-primary">+ Cadastrar</button>} />
+      <PageHeader title="Pessoas" description="Vendedores, parceiros e colaboradores indicadores" action={<button onClick={openCreateModal} className="btn-primary">+ Cadastrar</button>} />
 
       <div className="flex gap-1 mb-6">
         {tabs.map(t => (
@@ -56,46 +80,61 @@ export default function PessoasPage() {
 
       <div className="card overflow-hidden">
         {tab === 'sellers' && (
-          <Table headers={['Nome', 'E-mail', 'Cargo', 'Equipe', 'Status']}>
+          <Table headers={['Nome', 'E-mail', 'Cargo', 'Equipe', 'Status', '']}>
             {data.sellers.map((s: any) => (
               <Tr key={s.id}>
                 <Td><div className="font-medium">{s.name}</div></Td>
                 <Td><div className="text-sm text-gray-500">{s.email}</div></Td>
                 <Td><div className="text-sm text-gray-500">{s.role || '—'}</div></Td>
                 <Td><div className="text-sm text-gray-500">{s.team || '—'}</div></Td>
-                <Td><Badge color={s.active ? 'green' : 'gray'}>{s.active ? 'Ativo' : 'Inativo'}</Badge></Td>
+                <Td>
+                  <button onClick={() => toggleActive(s)}>
+                    <Badge color={s.active ? 'green' : 'gray'}>{s.active ? 'Ativo' : 'Inativo'}</Badge>
+                  </button>
+                </Td>
+                <Td><button onClick={() => openEditModal(s)} className="text-gray-400 hover:text-blue-500 text-sm">Editar</button></Td>
               </Tr>
             ))}
           </Table>
         )}
         {tab === 'partners' && (
-          <Table headers={['Nome', 'Tipo', 'E-mail', 'Chave Pix', 'Status']}>
+          <Table headers={['Nome', 'Tipo', 'E-mail', 'Chave Pix', 'Status', '']}>
             {data.partners.map((p: any) => (
               <Tr key={p.id}>
                 <Td><div className="font-medium">{p.name}</div></Td>
                 <Td><Badge color="blue">{p.type === 'pj' ? 'PJ' : 'PF'}</Badge></Td>
                 <Td><div className="text-sm text-gray-500">{p.email}</div></Td>
                 <Td><div className="text-xs font-mono text-gray-400">{p.pixKey || '—'}</div></Td>
-                <Td><Badge color={p.active ? 'green' : 'gray'}>{p.active ? 'Ativo' : 'Inativo'}</Badge></Td>
+                <Td>
+                  <button onClick={() => toggleActive(p)}>
+                    <Badge color={p.active ? 'green' : 'gray'}>{p.active ? 'Ativo' : 'Inativo'}</Badge>
+                  </button>
+                </Td>
+                <Td><button onClick={() => openEditModal(p)} className="text-gray-400 hover:text-blue-500 text-sm">Editar</button></Td>
               </Tr>
             ))}
           </Table>
         )}
         {tab === 'employees' && (
-          <Table headers={['Nome', 'E-mail', 'Departamento', 'Status']}>
+          <Table headers={['Nome', 'E-mail', 'Departamento', 'Status', '']}>
             {data.employees.map((e: any) => (
               <Tr key={e.id}>
                 <Td><div className="font-medium">{e.name}</div></Td>
                 <Td><div className="text-sm text-gray-500">{e.email}</div></Td>
                 <Td><div className="text-sm text-gray-500">{e.department || '—'}</div></Td>
-                <Td><Badge color={e.active ? 'green' : 'gray'}>{e.active ? 'Ativo' : 'Inativo'}</Badge></Td>
+                <Td>
+                  <button onClick={() => toggleActive(e)}>
+                    <Badge color={e.active ? 'green' : 'gray'}>{e.active ? 'Ativo' : 'Inativo'}</Badge>
+                  </button>
+                </Td>
+                <Td><button onClick={() => openEditModal(e)} className="text-gray-400 hover:text-blue-500 text-sm">Editar</button></Td>
               </Tr>
             ))}
           </Table>
         )}
       </div>
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={`Cadastrar ${tabs.find(t => t.key === tab)?.label}`}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={`${editingId ? 'Editar' : 'Cadastrar'} ${tabs.find(t => t.key === tab)?.label}`}>
         <form onSubmit={handleSave} className="space-y-4">
           <div>
             <label className="label">Nome *</label>
@@ -130,9 +169,15 @@ export default function PessoasPage() {
           {tab === 'employees' && (
             <div><label className="label">Departamento</label><input className="input" value={form.department || ''} onChange={e => setForm((f: any) => ({...f, department: e.target.value}))} /></div>
           )}
+          {editingId && (
+            <div className="flex items-center gap-2">
+              <input id="active-toggle" type="checkbox" checked={!!form.active} onChange={e => setForm((f: any) => ({...f, active: e.target.checked}))} />
+              <label htmlFor="active-toggle" className="label mb-0">Ativo</label>
+            </div>
+          )}
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setShowModal(false)} className="btn-secondary flex-1">Cancelar</button>
-            <button type="submit" disabled={saving} className="btn-primary flex-1">{saving ? 'Salvando...' : 'Cadastrar'}</button>
+            <button type="submit" disabled={saving} className="btn-primary flex-1">{saving ? 'Salvando...' : editingId ? 'Salvar alterações' : 'Cadastrar'}</button>
           </div>
         </form>
       </Modal>

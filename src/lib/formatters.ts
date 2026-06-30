@@ -47,3 +47,13 @@ export const commissionType: Record<string, string> = {
   RECURRING: 'Recorrente',
   BONUS: 'Bônus',
 }
+
+export const forecastStatusLabel: Record<string, string> = {
+  awaiting_billing: 'Aguardando faturamento',
+  awaiting_third_payment: 'Aguardando pagamento da 3ª mensalidade',
+  awaiting_first_payment: 'Aguardando pagamento da 1ª mensalidade',
+  awaiting_implantation_payment: 'Aguardando pagamento da implantação',
+  awaiting_contract: 'Aguardando conversão do contrato',
+  released: 'Liberada',
+  cancelled: 'Cancelada',
+}
