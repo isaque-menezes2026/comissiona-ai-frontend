@@ -46,6 +46,7 @@ export default function VendasPage() {
   const [sellers, setSellers] = useState<any[]>([])
   const [customers, setCustomers] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
+  const [commissionRules, setCommissionRules] = useState<any[]>([])
 
   // Modal state
   const [showModal, setShowModal] = useState(false)
@@ -59,11 +60,13 @@ export default function VendasPage() {
       api.get('/products'),
       api.get('/people/sellers'),
       api.get('/customers'),
-    ]).then(([s, p, sel, c]) => {
+      api.get('/commission-rules'),
+    ]).then(([s, p, sel, c, cr]) => {
       setSales(s.data)
       setProducts(p.data)
       setSellers(sel.data)
       setCustomers(c.data)
+      setCommissionRules(cr.data || [])
     }).finally(() => setLoading(false))
   }
 
@@ -107,6 +110,18 @@ export default function VendasPage() {
     setForm({ ...EMPTY_FORM, items: [] })
   }
 
+  // Mapeia commissionType da regra para o tipo de item da venda
+  const getDefaultItemType = (productId: string): string => {
+    const rule = commissionRules.find((r: any) => r.productId === productId && r.active !== false)
+    if (!rule) return 'MONTHLY'
+    const ct = rule.commissionType as string
+    if (ct === 'percentage_eventual_value' || ct === 'percentage_implantation') return 'IMPLANTATION'
+    if (ct === 'fixed_amount') return 'ONE_TIME'
+    if (ct === 'recurring') return 'MONTHLY'
+    // third_monthly_payment, first_monthly_payment, percentage_monthly_value → MONTHLY
+    return 'MONTHLY'
+  }
+
   const addItem = () =>
     setForm((f: any) => ({ ...f, items: [...f.items, { productId: '', type: 'MONTHLY', grossValue: 0 }] }))
 
@@ -118,6 +133,17 @@ export default function VendasPage() {
       ...f,
       items: f.items.map((item: any, idx: number) => idx === i ? { ...item, [field]: val } : item),
     }))
+
+  // Ao selecionar produto: preenche o tipo automaticamente
+  const selectItemProduct = (i: number, productId: string) => {
+    const suggestedType = getDefaultItemType(productId)
+    setForm((f: any) => ({
+      ...f,
+      items: f.items.map((item: any, idx: number) =>
+        idx === i ? { ...item, productId, type: suggestedType } : item
+      ),
+    }))
+  }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -346,7 +372,7 @@ export default function VendasPage() {
                 <select
                   className="input"
                   value={item.productId}
-                  onChange={e => updateItem(i, 'productId', e.target.value)}
+                  onChange={e => selectItemProduct(i, e.target.value)}
                   required
                 >
                   <option value="">Produto...</option>
