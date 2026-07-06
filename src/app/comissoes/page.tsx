@@ -98,18 +98,6 @@ export default function ComissoesPage() {
     }
   }
 
-  // Exclui definitivamente uma comissão (ex: gerada por engano por erro de
-  // configuração de regra). Só funciona para comissões ainda não pagas.
-  const handleDelete = async (c: any) => {
-    if (!confirm('Excluir esta comissão definitivamente? Essa ação não pode ser desfeita.')) return
-    try {
-      await api.delete(`/commissions/${c.id}`)
-      load()
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Não foi possível excluir esta comissão.')
-    }
-  }
-
   if (loading) return <LoadingSpinner />
 
   const selectableCount = commissions.filter(isSelectable).length
@@ -233,14 +221,7 @@ export default function ComissoesPage() {
                       </div>
                     ) : <span className="text-gray-300">—</span>}
                   </Td>
-                  <Td>
-                    <Badge color={st.color as any}>{st.label}</Badge>
-                    {c.status !== 'PAID' && (
-                      <button onClick={() => handleDelete(c)} className="block mt-1 text-xs text-red-400 hover:text-red-600 hover:underline">
-                        Excluir
-                      </button>
-                    )}
-                  </Td>
+                  <Td><Badge color={st.color as any}>{st.label}</Badge></Td>
                 </Tr>
               )
             })}
