@@ -81,6 +81,19 @@ export default function ComissoesPage() {
 
   const selectableCount = commissions.filter(isSelectable).length
 
+  // Total vendido (com base nos itens de venda por trás das comissões listadas).
+  // Deduplicado por saleItemId: um mesmo item de venda pode gerar mais de uma
+  // comissão (ex: 1ª e 3ª mensalidade, vendedor + parceiro), então somar direto
+  // pela linha da comissão contaria o mesmo valor de venda várias vezes.
+  const uniqueSaleItems = new Map<string, any>()
+  commissions.forEach((c: any) => {
+    if (c.saleItem?.id && !uniqueSaleItems.has(c.saleItem.id)) {
+      uniqueSaleItems.set(c.saleItem.id, c.saleItem)
+    }
+  })
+  const totalVendidoLiquido = [...uniqueSaleItems.values()].reduce((sum, si) => sum + Number(si.netValue || 0), 0)
+  const totalVendidoBruto = [...uniqueSaleItems.values()].reduce((sum, si) => sum + Number(si.grossValue || 0), 0)
+
   return (
     <div>
       <PageHeader
@@ -113,6 +126,15 @@ export default function ComissoesPage() {
           </div>
         </div>
       )}
+
+      <div className="card p-5 mb-6 flex items-center justify-between">
+        <div>
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Total Vendido (itens listados abaixo)</div>
+          <div className="text-2xl font-bold text-gray-900">{money(totalVendidoLiquido)}</div>
+          <div className="text-xs text-gray-400 mt-0.5">bruto: {money(totalVendidoBruto)} · {uniqueSaleItems.size} item(ns) de venda</div>
+        </div>
+        <span className="text-3xl">🧾</span>
+      </div>
 
       <div className="card overflow-hidden">
         <div className="flex gap-2 p-4 border-b border-gray-100">
