@@ -14,28 +14,55 @@ export default function ComissoesPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
   const [stats, setStats] = useState<any>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [marking, setMarking] = useState(false)
 
-  useEffect(() => {
+  const load = () => {
     Promise.all([
       api.get('/commissions' + (filter ? `?status=${filter}` : '')),
       api.get('/reports/dashboard'),
-    ]).then(([c, d]) => { setCommissions(c.data); setStats(d.data) })
+    ]).then(([c, d]) => { setCommissions(c.data); setStats(d.data); setSelected(new Set()) })
     .finally(() => setLoading(false))
-  }, [filter])
+  }
 
-  const handleProcessInvoice = async (commissionSaleId: string) => {
-    const installment = prompt('Qual numero da parcela paga?')
-    const amount = prompt('Qual valor pago?')
-    if (!installment || !amount) return
+  useEffect(() => { load() }, [filter])
+
+  // Comissões já pagas ou canceladas não podem ser selecionadas novamente
+  const isSelectable = (c: any) => c.status !== 'PAID' && c.status !== 'CANCELLED'
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    const selectableIds = commissions.filter(isSelectable).map(c => c.id)
+    const allSelected = selectableIds.length > 0 && selectableIds.every(id => selected.has(id))
+    setSelected(allSelected ? new Set() : new Set(selectableIds))
+  }
+
+  const handleMarkPaid = async () => {
+    if (selected.size === 0) return
+    if (!confirm(`Marcar ${selected.size} comissão(ões) selecionada(s) como paga(s)?`)) return
+    setMarking(true)
     try {
-      await api.post('/commissions/process-invoice', { saleId: commissionSaleId, installmentNum: parseInt(installment), paidAmount: parseFloat(amount) })
-      alert('Parcela processada! Comissoes atualizadas.')
-      setLoading(true)
-      api.get('/commissions').then(r => setCommissions(r.data)).finally(() => setLoading(false))
-    } catch (e: any) { alert(e.response?.data?.message || 'Erro') }
+      const { data } = await api.patch('/commissions/mark-paid', { ids: Array.from(selected) })
+      alert(data.message || 'Comissões atualizadas.')
+      load()
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Erro ao marcar comissões como pagas.')
+    } finally {
+      setMarking(false)
+    }
   }
 
   if (loading) return <LoadingSpinner />
+
+  const selectableCount = commissions.filter(isSelectable).length
 
   return (
     <div>
@@ -46,13 +73,18 @@ export default function ComissoesPage() {
           <StatCard label="Previstas" value={money(stats.predicted?._sum?.amount)} sub={`${stats.predicted?._count} registros`} color="blue" icon="📋" />
           <StatCard label="Liberadas" value={money(stats.released?._sum?.amount)} sub={`${stats.released?._count} registros`} color="green" icon="✅" />
           <StatCard label="Pagas" value={money(stats.paid?._sum?.amount)} sub={`${stats.paid?._count} registros`} color="gray" icon="💰" />
-          <div className="card p-5">
-            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Processar Fatura</div>
-            <p className="text-xs text-gray-500 mb-3">Marque faturas como pagas para liberar comissoes automaticamente</p>
-            <button onClick={() => {
-              const saleId = prompt('ID da venda:')
-              if (saleId) handleProcessInvoice(saleId)
-            }} className="btn-secondary w-full text-sm py-2">Registrar Pagamento</button>
+          <div className="card p-5 flex flex-col justify-center">
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Marcar como pagas</div>
+            {selected.size > 0 ? (
+              <>
+                <p className="text-xs text-gray-500 mb-3">{selected.size} comissão(ões) selecionada(s)</p>
+                <button onClick={handleMarkPaid} disabled={marking} className="btn-primary w-full text-sm py-2">
+                  {marking ? 'Marcando...' : `Marcar ${selected.size} como paga(s)`}
+                </button>
+              </>
+            ) : (
+              <p className="text-xs text-gray-400">Marque o check das comissões na tabela abaixo e clique aqui para dar baixa no pagamento.</p>
+            )}
           </div>
         </div>
       )}
@@ -66,15 +98,31 @@ export default function ComissoesPage() {
             </button>
           ))}
         </div>
+        {selectableCount > 0 && (
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-50 text-xs text-gray-500">
+            <input
+              type="checkbox"
+              checked={commissions.filter(isSelectable).every(c => selected.has(c.id))}
+              onChange={toggleSelectAll}
+            />
+            <span>Selecionar todas as elegíveis para pagamento ({selectableCount})</span>
+          </div>
+        )}
         {commissions.length === 0 ? (
           <EmptyState icon="💰" title="Nenhuma comissao encontrada" description="As comissoes sao calculadas automaticamente quando uma venda e cadastrada." />
         ) : (
-          <Table headers={['Beneficiario', 'Produto', 'Cliente', 'Tipo', 'Valor', 'Previsao', 'Status']}>
+          <Table headers={['', 'Beneficiario', 'Produto', 'Cliente', 'Tipo', 'Valor', 'Previsao', 'Status']}>
             {commissions.map((c: any) => {
               const st = commissionStatus[c.status] || { label: c.status, color: 'gray' }
               const bene = c.seller?.name || c.partner?.name || c.employee?.name || '—'
+              const selectable = isSelectable(c)
               return (
                 <Tr key={c.id}>
+                  <Td>
+                    {selectable && (
+                      <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelect(c.id)} />
+                    )}
+                  </Td>
                   <Td><div className="font-medium">{bene}</div></Td>
                   <Td><div className="text-sm text-gray-600">{c.saleItem?.product?.name || '—'}</div></Td>
                   <Td><div className="text-sm text-gray-500">{c.sale?.customer?.companyName || '—'}</div></Td>

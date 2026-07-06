@@ -116,6 +116,16 @@ export default function VendasPage() {
     setForm({ ...EMPTY_FORM, items: [] })
   }
 
+  const handleDelete = async (sale: any) => {
+    if (!confirm(`Excluir a venda de "${sale.customer?.companyName || 'cliente'}"? Essa ação não pode ser desfeita.`)) return
+    try {
+      await api.delete(`/sales/${sale.id}`)
+      load()
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Não foi possível excluir esta venda.')
+    }
+  }
+
   // Mapeia commissionType da regra para o tipo de item da venda
   const getDefaultItemType = (productId: string): string => {
     const rule = commissionRules.find((r: any) => r.productId === productId && r.active !== false)
@@ -236,12 +246,20 @@ export default function VendasPage() {
                     </span>
                   </Td>
                   <Td>
-                    <button
-                      onClick={() => openEdit(s)}
-                      className="text-xs text-blue-600 hover:text-blue-800 hover:underline px-2 py-1"
-                    >
-                      Editar
-                    </button>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => openEdit(s)}
+                        className="text-xs text-blue-600 hover:text-blue-800 hover:underline px-2 py-1"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => handleDelete(s)}
+                        className="text-xs text-red-400 hover:text-red-600 hover:underline px-2 py-1"
+                      >
+                        Excluir
+                      </button>
+                    </div>
                   </Td>
                 </Tr>
               )

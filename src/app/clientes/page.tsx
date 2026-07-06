@@ -22,6 +22,7 @@ export default function ClientesPage() {
   const [partners, setPartners] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
   const [form, setForm] = useState<any>({ status: 'active', origin: 'direct' })
@@ -38,29 +39,72 @@ export default function ClientesPage() {
 
   useEffect(() => { load() }, [])
 
+  const openNew = () => {
+    setEditingId(null)
+    setForm({ status: 'active', origin: 'direct' })
+    setShowModal(true)
+  }
+
+  const openEdit = (c: any) => {
+    setEditingId(c.id)
+    setForm({
+      companyName: c.companyName,
+      tradeName: c.tradeName || '',
+      document: c.document || '',
+      email: c.email || '',
+      phone: c.phone || '',
+      city: c.city || '',
+      state: c.state || '',
+      sellerId: c.sellerId || '',
+      partnerId: c.partnerId || '',
+      status: c.status || 'active',
+    })
+    setShowModal(true)
+  }
+
+  const closeModal = () => {
+    setShowModal(false)
+    setEditingId(null)
+    setForm({ status: 'active', origin: 'direct' })
+  }
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true)
     try {
-      await api.post('/customers', form)
-      setShowModal(false); setForm({ status: 'active', origin: 'direct' }); load()
+      if (editingId) {
+        await api.patch(`/customers/${editingId}`, form)
+      } else {
+        await api.post('/customers', form)
+      }
+      closeModal(); load()
     } catch (err: any) { alert(err.response?.data?.message || 'Erro') }
     finally { setSaving(false) }
+  }
+
+  const handleDelete = async (c: any) => {
+    if (!confirm(`Excluir o cliente "${c.companyName}"? Essa ação não pode ser desfeita.`)) return
+    try {
+      await api.delete(`/customers/${c.id}`)
+      load()
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Não foi possível excluir este cliente.')
+    }
   }
 
   if (loading) return <LoadingSpinner />
 
   return (
     <div>
-      <PageHeader title="Clientes" description="Cadastro de clientes e empresas" action={<button onClick={() => setShowModal(true)} className="btn-primary">+ Novo Cliente</button>} />
+      <PageHeader title="Clientes" description="Cadastro de clientes e empresas" action={<button onClick={openNew} className="btn-primary">+ Novo Cliente</button>} />
 
       <div className="card overflow-hidden">
         <div className="p-4 border-b border-gray-100">
           <input className="input max-w-xs" placeholder="Buscar cliente..." value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && load(search)} />
         </div>
         {customers.length === 0 ? (
-          <EmptyState icon="🏢" title="Nenhum cliente cadastrado" action={<button onClick={() => setShowModal(true)} className="btn-primary">Novo Cliente</button>} />
+          <EmptyState icon="🏢" title="Nenhum cliente cadastrado" action={<button onClick={openNew} className="btn-primary">Novo Cliente</button>} />
         ) : (
-          <Table headers={['Empresa', 'Documento', 'Cidade/UF', 'Vendedor', 'Entrada', 'Status']}>
+          <Table headers={['Empresa', 'Documento', 'Cidade/UF', 'Vendedor', 'Entrada', 'Status', '']}>
             {customers.map((c: any) => {
               const st = statusOptions.find(s => s.value === c.status) || { label: c.status, color: 'gray' }
               return (
@@ -71,6 +115,12 @@ export default function ClientesPage() {
                   <Td><div className="text-sm text-gray-600">{c.seller?.name || '—'}</div></Td>
                   <Td>{date(c.entryDate || c.createdAt)}</Td>
                   <Td><Badge color={st.color as any}>{st.label}</Badge></Td>
+                  <Td>
+                    <div className="flex gap-2">
+                      <button onClick={() => openEdit(c)} className="text-xs text-blue-600 hover:text-blue-800 hover:underline px-1">Editar</button>
+                      <button onClick={() => handleDelete(c)} className="text-xs text-red-400 hover:text-red-600 hover:underline px-1">Excluir</button>
+                    </div>
+                  </Td>
                 </Tr>
               )
             })}
@@ -78,7 +128,7 @@ export default function ClientesPage() {
         )}
       </div>
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title="Novo Cliente" size="lg">
+      <Modal open={showModal} onClose={closeModal} title={editingId ? 'Editar Cliente' : 'Novo Cliente'} size="lg">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
@@ -123,10 +173,21 @@ export default function ClientesPage() {
                 {partners.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
+            <div>
+              <label className="label">Status</label>
+              <select className="input" value={form.status || 'active'} onChange={e => setForm((f: any) => ({...f, status: e.target.value}))}>
+                {statusOptions.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
           </div>
+          {editingId && (
+            <p className="text-xs text-gray-400">
+              Se este cliente tiver vendas associadas, prefira marcar o status como "Inativo" em vez de excluir.
+            </p>
+          )}
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setShowModal(false)} className="btn-secondary flex-1">Cancelar</button>
-            <button type="submit" disabled={saving} className="btn-primary flex-1">{saving ? 'Salvando...' : 'Criar Cliente'}</button>
+            <button type="button" onClick={closeModal} className="btn-secondary flex-1">Cancelar</button>
+            <button type="submit" disabled={saving} className="btn-primary flex-1">{saving ? 'Salvando...' : editingId ? 'Salvar alterações' : 'Criar Cliente'}</button>
           </div>
         </form>
       </Modal>

@@ -57,6 +57,16 @@ export default function PessoasPage() {
     } catch (err: any) { alert(err.response?.data?.message || 'Erro') }
   }
 
+  const handleDelete = async (item: any) => {
+    if (!confirm(`Excluir "${item.name}"? Essa ação não pode ser desfeita.`)) return
+    try {
+      await api.delete(`/people/${tab}/${item.id}`)
+      load()
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Não foi possível excluir.')
+    }
+  }
+
   const tabs = [
     { key: 'sellers', label: 'Vendedores', icon: '👤' },
     { key: 'partners', label: 'Parceiros', icon: '🤝' },
@@ -92,7 +102,12 @@ export default function PessoasPage() {
                     <Badge color={s.active ? 'green' : 'gray'}>{s.active ? 'Ativo' : 'Inativo'}</Badge>
                   </button>
                 </Td>
-                <Td><button onClick={() => openEditModal(s)} className="text-gray-400 hover:text-blue-500 text-sm">Editar</button></Td>
+                <Td>
+                  <div className="flex gap-2">
+                    <button onClick={() => openEditModal(s)} className="text-gray-400 hover:text-blue-500 text-sm">Editar</button>
+                    <button onClick={() => handleDelete(s)} className="text-red-400 hover:text-red-600 text-sm">Excluir</button>
+                  </div>
+                </Td>
               </Tr>
             ))}
           </Table>
@@ -110,7 +125,12 @@ export default function PessoasPage() {
                     <Badge color={p.active ? 'green' : 'gray'}>{p.active ? 'Ativo' : 'Inativo'}</Badge>
                   </button>
                 </Td>
-                <Td><button onClick={() => openEditModal(p)} className="text-gray-400 hover:text-blue-500 text-sm">Editar</button></Td>
+                <Td>
+                  <div className="flex gap-2">
+                    <button onClick={() => openEditModal(p)} className="text-gray-400 hover:text-blue-500 text-sm">Editar</button>
+                    <button onClick={() => handleDelete(p)} className="text-red-400 hover:text-red-600 text-sm">Excluir</button>
+                  </div>
+                </Td>
               </Tr>
             ))}
           </Table>
@@ -127,7 +147,12 @@ export default function PessoasPage() {
                     <Badge color={e.active ? 'green' : 'gray'}>{e.active ? 'Ativo' : 'Inativo'}</Badge>
                   </button>
                 </Td>
-                <Td><button onClick={() => openEditModal(e)} className="text-gray-400 hover:text-blue-500 text-sm">Editar</button></Td>
+                <Td>
+                  <div className="flex gap-2">
+                    <button onClick={() => openEditModal(e)} className="text-gray-400 hover:text-blue-500 text-sm">Editar</button>
+                    <button onClick={() => handleDelete(e)} className="text-red-400 hover:text-red-600 text-sm">Excluir</button>
+                  </div>
+                </Td>
               </Tr>
             ))}
           </Table>
