@@ -16,6 +16,7 @@ export default function ComissoesPage() {
   const [stats, setStats] = useState<any>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [marking, setMarking] = useState(false)
+  const [refreshingText, setRefreshingText] = useState(false)
 
   const load = () => {
     Promise.all([
@@ -60,13 +61,37 @@ export default function ComissoesPage() {
     }
   }
 
+  // Manutenção pontual: recalcula apenas o texto de previsão (forecastReason)
+  // das comissões já existentes, para refletir o gatilho real da regra em vez
+  // do texto genérico antigo. Não mexe em valor, status ou datas.
+  const handleRefreshForecastText = async () => {
+    setRefreshingText(true)
+    try {
+      const { data } = await api.patch('/commissions/refresh-forecast-text')
+      alert(data.message || 'Textos de previsão atualizados.')
+      load()
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Erro ao atualizar textos de previsão.')
+    } finally {
+      setRefreshingText(false)
+    }
+  }
+
   if (loading) return <LoadingSpinner />
 
   const selectableCount = commissions.filter(isSelectable).length
 
   return (
     <div>
-      <PageHeader title="Comissoes" description="Acompanhe todas as comissoes calculadas pelo sistema" />
+      <PageHeader
+        title="Comissoes"
+        description="Acompanhe todas as comissoes calculadas pelo sistema"
+        action={
+          <button onClick={handleRefreshForecastText} disabled={refreshingText} className="btn-secondary text-xs py-1.5">
+            {refreshingText ? 'Atualizando...' : 'Atualizar textos de previsão'}
+          </button>
+        }
+      />
 
       {stats && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -111,7 +136,7 @@ export default function ComissoesPage() {
         {commissions.length === 0 ? (
           <EmptyState icon="💰" title="Nenhuma comissao encontrada" description="As comissoes sao calculadas automaticamente quando uma venda e cadastrada." />
         ) : (
-          <Table headers={['', 'Beneficiario', 'Produto', 'Cliente', 'Tipo', 'Valor', 'Previsao', 'Status']}>
+          <Table headers={['', 'Beneficiario', 'Produto', 'Cliente', 'Tipo', 'Venda', 'Comissão', 'Previsao', 'Status']}>
             {commissions.map((c: any) => {
               const st = commissionStatus[c.status] || { label: c.status, color: 'gray' }
               const bene = c.seller?.name || c.partner?.name || c.employee?.name || '—'
@@ -129,6 +154,14 @@ export default function ComissoesPage() {
                   <Td>
                     <div className="text-xs text-gray-400">{commissionType[c.commissionType] || c.commissionType}</div>
                     {c.rule?.name && <div className="text-xs text-gray-300">{c.rule.name}</div>}
+                  </Td>
+                  <Td>
+                    {c.saleItem ? (
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">{money(c.saleItem.netValue)}</div>
+                        <div className="text-xs text-gray-400">bruto: {money(c.saleItem.grossValue)}</div>
+                      </div>
+                    ) : <span className="text-gray-300">—</span>}
                   </Td>
                   <Td><div className="font-semibold text-gray-900">{money(c.amount)}</div></Td>
                   <Td>
