@@ -17,6 +17,7 @@ export default function ComissoesPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [marking, setMarking] = useState(false)
   const [refreshingText, setRefreshingText] = useState(false)
+  const [fixingScoping, setFixingScoping] = useState(false)
 
   const load = () => {
     Promise.all([
@@ -77,6 +78,26 @@ export default function ComissoesPage() {
     }
   }
 
+  // Manutenção pontual: regras de comissão recorrente/percentual do vendedor
+  // (ex: 3ª mensalidade 100%) estavam sem restrição de origem e valiam também
+  // para vendas de parceiro/colaborador, pagando o vendedor duas vezes pela
+  // mesma venda (o fixo de conversão E a comissão recorrente completa).
+  // Restringe essas regras a "venda direta" e cancela as comissões pendentes
+  // que ficaram indevidas por causa disso.
+  const handleFixOriginScoping = async () => {
+    if (!confirm('Isso vai restringir as regras recorrentes/percentuais do vendedor a "venda direta" e cancelar comissões pendentes que não deveriam ter sido geradas para vendas de parceiro/colaborador. Continuar?')) return
+    setFixingScoping(true)
+    try {
+      const { data } = await api.patch('/commissions/fix-origin-scoping')
+      alert(data.message || 'Regras corrigidas.')
+      load()
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Erro ao corrigir escopo das regras.')
+    } finally {
+      setFixingScoping(false)
+    }
+  }
+
   if (loading) return <LoadingSpinner />
 
   const selectableCount = commissions.filter(isSelectable).length
@@ -100,9 +121,14 @@ export default function ComissoesPage() {
         title="Comissoes"
         description="Acompanhe todas as comissoes calculadas pelo sistema"
         action={
-          <button onClick={handleRefreshForecastText} disabled={refreshingText} className="btn-secondary text-xs py-1.5">
-            {refreshingText ? 'Atualizando...' : 'Atualizar textos de previsão'}
-          </button>
+          <div className="flex gap-2">
+            <button onClick={handleFixOriginScoping} disabled={fixingScoping} className="btn-secondary text-xs py-1.5">
+              {fixingScoping ? 'Corrigindo...' : 'Corrigir regras de origem (parceiro x direta)'}
+            </button>
+            <button onClick={handleRefreshForecastText} disabled={refreshingText} className="btn-secondary text-xs py-1.5">
+              {refreshingText ? 'Atualizando...' : 'Atualizar textos de previsão'}
+            </button>
+          </div>
         }
       />
 
