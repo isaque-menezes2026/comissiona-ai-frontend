@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react'
 import api from '@/lib/api'
 import PageHeader from '@/components/layout/PageHeader'
 import Badge from '@/components/ui/Badge'
-import Table, { Tr, Td } from '@/components/ui/Table'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import Modal from '@/components/ui/Modal'
 import { commissionType } from '@/lib/formatters'
@@ -17,8 +16,28 @@ const triggerLabels: Record<string, string> = {
   MANUAL_APPROVAL: 'Aprovacao manual',
 }
 
-const beneficiaryLabels: Record<string, string> = {
-  SELLER: 'Vendedor', PARTNER: 'Parceiro', EMPLOYEE: 'Colaborador',
+const beneficiaryGroups: { key: string; label: string; icon: string }[] = [
+  { key: 'PARTNER', label: 'Parceiros', icon: '🤝' },
+  { key: 'SELLER', label: 'Vendedores', icon: '👤' },
+  { key: 'EMPLOYEE', label: 'Colaboradores', icon: '🏢' },
+]
+
+function ruleValue(r: any) {
+  if (r.fixedAmount) return `R$ ${Number(r.fixedAmount).toFixed(2)}`
+  if (r.percentage) return `${Number(r.percentage).toFixed(1)}%`
+  return '—'
+}
+
+// Agrupa uma lista de regras por produto (ou "Todos os produtos" quando productId é nulo)
+function groupByProduct(rules: any[]) {
+  const map = new Map<string, { productName: string; rules: any[] }>()
+  for (const r of rules) {
+    const key = r.product?.id || r.productId || 'ALL'
+    const productName = r.product?.name || 'Todos os produtos'
+    if (!map.has(key)) map.set(key, { productName, rules: [] })
+    map.get(key)!.rules.push(r)
+  }
+  return Array.from(map.values()).sort((a, b) => a.productName.localeCompare(b.productName))
 }
 
 export default function RegrasPage() {
@@ -51,24 +70,56 @@ export default function RegrasPage() {
     <div>
       <PageHeader title="Regras de Comissao" description="Configure as regras de calculo para cada produto e canal" action={<button onClick={() => setShowModal(true)} className="btn-primary">+ Nova Regra</button>} />
 
-      <div className="card overflow-hidden">
-        <Table headers={['Nome', 'Produto', 'Beneficiario', 'Tipo', 'Valor', 'Gatilho', 'Status']}>
-          {rules.map(r => (
-            <Tr key={r.id}>
-              <Td><div className="font-medium">{r.name}</div>{r.description && <div className="text-xs text-gray-400">{r.description}</div>}</Td>
-              <Td><div className="text-sm text-gray-600">{r.product?.name || 'Todos'}</div></Td>
-              <Td><Badge color="blue">{beneficiaryLabels[r.beneficiaryType] || r.beneficiaryType}</Badge></Td>
-              <Td><div className="text-xs text-gray-500">{commissionType[r.commissionType] || r.commissionType}</div></Td>
-              <Td>
-                {r.fixedAmount ? <span className="font-semibold">R$ {Number(r.fixedAmount).toFixed(2)}</span> : null}
-                {r.percentage ? <span className="font-semibold">{Number(r.percentage).toFixed(1)}%</span> : null}
-              </Td>
-              <Td><div className="text-xs text-gray-500">{triggerLabels[r.triggerEvent] || r.triggerEvent}</div></Td>
-              <Td><Badge color={r.active ? 'green' : 'gray'}>{r.active ? 'Ativa' : 'Inativa'}</Badge></Td>
-            </Tr>
-          ))}
-        </Table>
-      </div>
+      {rules.length === 0 ? (
+        <div className="card p-10 text-center text-gray-400">
+          <p className="text-lg">Nenhuma regra cadastrada ainda</p>
+          <p className="text-sm mt-2">Clique em &ldquo;+ Nova Regra&rdquo; para criar a primeira.</p>
+        </div>
+      ) : (
+        beneficiaryGroups.map(group => {
+          const groupRules = rules.filter(r => r.beneficiaryType === group.key)
+          if (groupRules.length === 0) return null
+          const byProduct = groupByProduct(groupRules)
+
+          return (
+            <div key={group.key} className="mb-8">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-xl">{group.icon}</span>
+                <h2 className="text-base font-semibold text-gray-900">{group.label}</h2>
+                <span className="text-xs text-gray-400">({groupRules.length} regra{groupRules.length !== 1 ? 's' : ''})</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {byProduct.map(({ productName, rules: productRules }) => (
+                  <div key={productName} className="card p-5">
+                    <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-50">
+                      <h3 className="font-semibold text-gray-800 text-sm">📦 {productName}</h3>
+                      <Badge color="blue">{productRules.length}</Badge>
+                    </div>
+                    <div className="space-y-3">
+                      {productRules.map((r, i) => (
+                        <div key={r.id} className={i > 0 ? 'pt-3 border-t border-gray-50' : ''}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-900">{r.name}</span>
+                            <span className="text-sm font-semibold text-indigo-600">{ruleValue(r)}</span>
+                          </div>
+                          {r.description && (
+                            <p className="text-xs text-gray-400 mt-0.5">{r.description}</p>
+                          )}
+                          <div className="flex items-center justify-between mt-1.5">
+                            <span className="text-xs text-gray-400">{commissionType[r.commissionType] || r.commissionType} · {triggerLabels[r.triggerEvent] || r.triggerEvent}</span>
+                            <Badge color={r.active ? 'green' : 'gray'}>{r.active ? 'Ativa' : 'Inativa'}</Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })
+      )}
 
       <Modal open={showModal} onClose={() => setShowModal(false)} title="Nova Regra de Comissao" size="lg">
         <form onSubmit={handleSave} className="space-y-4">
