@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import api from '@/lib/api'
 import { useAuthStore } from '@/store/auth.store'
 import StatCard from '@/components/ui/StatCard'
@@ -299,7 +300,7 @@ export default function DashboardPage() {
                     <div className="font-semibold text-green-800">{money(released)} aguardando pagamento</div>
                     <div className="text-sm text-green-600">{data?.released?._count} comissões liberadas prontas para gerar lote</div>
                   </div>
-                  <a href="/pagamentos" className="ml-auto btn-primary text-sm py-2">Gerar Lote</a>
+                  <Link href="/pagamentos" className="ml-auto btn-primary text-sm py-2">Gerar Lote</Link>
                 </div>
               </div>
             )}
@@ -328,9 +329,9 @@ export default function DashboardPage() {
                       </div>
                     ))}
                   </div>
-                  <a href="/relatorios" className="block text-center text-sm text-blue-600 hover:underline pt-4 border-t border-gray-50 mt-4">
+                  <Link href="/relatorios" className="block text-center text-sm text-blue-600 hover:underline pt-4 border-t border-gray-50 mt-4">
                     Ver relatório completo →
-                  </a>
+                  </Link>
                 </div>
               )}
 
@@ -375,7 +376,7 @@ export default function DashboardPage() {
                         </div>
                       )
                     })}
-                    <a href="/vendas" className="block text-center text-sm text-blue-600 hover:underline pt-2">Ver todas →</a>
+                    <Link href="/vendas" className="block text-center text-sm text-blue-600 hover:underline pt-2">Ver todas →</Link>
                   </div>
                 )}
               </div>
