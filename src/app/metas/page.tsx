@@ -2,9 +2,10 @@
 import { useEffect, useState } from 'react'
 import api from '@/lib/api'
 import PageHeader from '@/components/layout/PageHeader'
+import Badge from '@/components/ui/Badge'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import Modal from '@/components/ui/Modal'
-import { money } from '@/lib/formatters'
+import { money, date } from '@/lib/formatters'
 
 const periodTypes = [
   { value: 'weekly', label: 'Semanal' },
@@ -44,6 +45,18 @@ function periodOptions(type: string, year: number) {
   return []
 }
 
+function shortPeriodLabel(periodType: string, periodKey: string) {
+  if (periodType === 'monthly') {
+    const [y, m] = periodKey.split('-')
+    return `${['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][Number(m) - 1] || m}/${y?.slice(2)}`
+  }
+  if (periodType === 'yearly') return periodKey
+  if (periodType === 'quarterly') return periodKey.replace('-', ' ')
+  if (periodType === 'semiannual') return periodKey.replace('-', ' ')
+  if (periodType === 'weekly') return periodKey.split('-')[1] || periodKey
+  return periodKey
+}
+
 function formatAchieved(value: number, type: string) {
   if (type === 'quantity') return `${value} venda${value === 1 ? '' : 's'}`
   return money(value)
@@ -51,6 +64,7 @@ function formatAchieved(value: number, type: string) {
 
 const emptyForm = (periodType: string, periodKey: string) => ({
   periodType, periodKey, type: 'revenue', productId: '', targetValue: '', bonusAmount: '',
+  startDate: '', endDate: '', active: true,
 })
 
 export default function MetasPage() {
@@ -64,13 +78,25 @@ export default function MetasPage() {
   const [periodKey, setPeriodKey] = useState(getCurrentPeriodKey('monthly'))
   const [year] = useState(new Date().getFullYear())
   const [form, setForm] = useState<any>(emptyForm('monthly', getCurrentPeriodKey('monthly')))
+  const [history, setHistory] = useState<Record<string, any[]>>({})
 
   const load = () => {
     setLoading(true)
     Promise.all([
       api.get(`/goals/progress?periodType=${periodType}&periodKey=${periodKey}`),
       api.get('/products'),
-    ]).then(([g, p]) => { setGoals(g.data); setProducts(p.data) })
+    ]).then(([g, p]) => {
+      setGoals(g.data)
+      setProducts(p.data)
+      // Busca evolução (últimos 6 períodos) de cada meta em paralelo
+      Promise.all(
+        g.data.map((goal: any) =>
+          api.get('/goals/history', {
+            params: { periodType, periodKey, productId: goal.productId || '', sellerId: goal.sellerId || '', count: 6 },
+          }).then((r: any) => [goal.id, r.data])
+        )
+      ).then((entries: any[]) => setHistory(Object.fromEntries(entries)))
+    })
     .finally(() => setLoading(false))
   }
 
@@ -96,6 +122,9 @@ export default function MetasPage() {
       productId: g.productId || '',
       targetValue: g.targetValue,
       bonusAmount: g.bonusAmount || '',
+      startDate: g.startDate ? g.startDate.slice(0, 10) : '',
+      endDate: g.endDate ? g.endDate.slice(0, 10) : '',
+      active: g.active !== false,
     })
     setShowModal(true)
   }
@@ -108,6 +137,8 @@ export default function MetasPage() {
         productId: form.productId || null,
         targetValue: parseFloat(form.targetValue),
         bonusAmount: form.bonusAmount ? parseFloat(form.bonusAmount) : null,
+        startDate: form.startDate || null,
+        endDate: form.endDate || null,
       }
       if (editingId) {
         await api.patch(`/goals/${editingId}`, payload)
@@ -121,8 +152,13 @@ export default function MetasPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Remover esta meta?')) return
+    if (!confirm('Remover esta meta definitivamente?')) return
     await api.delete(`/goals/${id}`)
+    load()
+  }
+
+  const toggleActive = async (g: any) => {
+    await api.patch(`/goals/${g.id}`, { active: !g.active })
     load()
   }
 
@@ -151,17 +187,29 @@ export default function MetasPage() {
           {goals.map((g: any) => {
             const pct = Math.min(g.percentage || 0, 100)
             const color = pct >= 100 ? 'bg-green-500' : pct >= 80 ? 'bg-yellow-400' : pct >= 50 ? 'bg-blue-500' : 'bg-gray-300'
+            const goalHistory = history[g.id] || []
             return (
               <div key={g.id} className="card p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {g.product?.color && <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: g.product.color }} />}
                       <div className="font-semibold text-gray-900">{g.product?.name || 'Meta Geral'}</div>
                       <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
                         {g.type === 'quantity' ? 'Quantidade' : 'Receita'}
                       </span>
+                      <button onClick={() => toggleActive(g)}>
+                        <Badge color={g.active === false ? 'gray' : 'green'}>{g.active === false ? 'Inativa' : 'Ativa'}</Badge>
+                      </button>
+                      {g.isValid === false && (
+                        <span className="text-xs bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded-full">Fora da validade</span>
+                      )}
                     </div>
+                    {(g.startDate || g.endDate) && (
+                      <div className="text-xs text-gray-400 mt-1">
+                        Válida: {g.startDate ? date(g.startDate) : '—'} até {g.endDate ? date(g.endDate) : '—'}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="text-right">
@@ -182,6 +230,24 @@ export default function MetasPage() {
                 {g.bonusAmount && (
                   <div className="mt-3 text-xs bg-green-50 text-green-700 px-3 py-2 rounded-lg">
                     Bônus ao atingir: {money(g.bonusAmount)}
+                  </div>
+                )}
+
+                {goalHistory.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-gray-50">
+                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Evolução</div>
+                    <div className="flex items-end gap-1.5 h-14">
+                      {goalHistory.map((h: any) => {
+                        const hpct = Math.min(h.percentage || 0, 100)
+                        const barColor = !h.hasGoal ? 'bg-gray-100' : hpct >= 100 ? 'bg-green-400' : hpct >= 50 ? 'bg-blue-400' : 'bg-gray-300'
+                        return (
+                          <div key={h.periodKey} className="flex-1 flex flex-col items-center justify-end h-full" title={`${shortPeriodLabel(periodType, h.periodKey)}: ${h.hasGoal ? hpct.toFixed(0) + '%' : 'sem meta'}`}>
+                            <div className={`w-full rounded-t ${barColor}`} style={{ height: `${Math.max(hpct, h.hasGoal ? 6 : 3)}%` }} />
+                            <div className="text-[10px] text-gray-400 mt-1">{shortPeriodLabel(periodType, h.periodKey)}</div>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
@@ -206,8 +272,19 @@ export default function MetasPage() {
               {goalTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </div>
-          <div>
-            <label className="label">Período: {periodTypes.find(p => p.value === form.periodType)?.label} — {periodOptions(form.periodType, year).find(o => o.value === form.periodKey)?.label}</label>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Tipo de período</label>
+              <select className="input" value={form.periodType} onChange={e => setForm((f: any) => ({...f, periodType: e.target.value, periodKey: getCurrentPeriodKey(e.target.value)}))}>
+                {periodTypes.map(pt => <option key={pt.value} value={pt.value}>{pt.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Período</label>
+              <select className="input" value={form.periodKey} onChange={e => setForm((f: any) => ({...f, periodKey: e.target.value}))}>
+                {periodOptions(form.periodType, year).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
           </div>
           <div>
             <label className="label">{form.type === 'quantity' ? 'Meta de Quantidade (nº de vendas) *' : 'Meta de Receita (R$) *'}</label>
@@ -217,6 +294,25 @@ export default function MetasPage() {
             <label className="label">Bônus ao atingir (R$, opcional)</label>
             <input type="number" className="input" min={0} step={0.01} value={form.bonusAmount} onChange={e => setForm((f: any) => ({...f, bonusAmount: e.target.value}))} />
           </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Válida a partir de (opcional)</label>
+              <input type="date" className="input" value={form.startDate || ''} onChange={e => setForm((f: any) => ({...f, startDate: e.target.value}))} />
+            </div>
+            <div>
+              <label className="label">Válida até (opcional)</label>
+              <input type="date" className="input" value={form.endDate || ''} onChange={e => setForm((f: any) => ({...f, endDate: e.target.value}))} />
+            </div>
+          </div>
+          {editingId && (
+            <div className="flex items-center gap-2">
+              <input id="goal-active" type="checkbox" checked={!!form.active} onChange={e => setForm((f: any) => ({...f, active: e.target.checked}))} />
+              <label htmlFor="goal-active" className="label mb-0">Ativa</label>
+            </div>
+          )}
+          <p className="text-xs text-gray-400">
+            Se já existir uma meta ativa para o mesmo produto e período, ela será inativada automaticamente ao salvar esta.
+          </p>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setShowModal(false)} className="btn-secondary flex-1">Cancelar</button>
             <button type="submit" disabled={saving} className="btn-primary flex-1">{saving ? 'Salvando...' : editingId ? 'Salvar alterações' : 'Criar Meta'}</button>
