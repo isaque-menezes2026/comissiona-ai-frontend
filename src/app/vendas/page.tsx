@@ -45,6 +45,8 @@ export default function VendasPage() {
   const [products, setProducts] = useState<any[]>([])
   const [sellers, setSellers] = useState<any[]>([])
   const [customers, setCustomers] = useState<any[]>([])
+  const [partners, setPartners] = useState<any[]>([])
+  const [employees, setEmployees] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
   const [commissionRules, setCommissionRules] = useState<any[]>([])
 
@@ -61,12 +63,16 @@ export default function VendasPage() {
       api.get('/people/sellers'),
       api.get('/customers'),
       api.get('/commission-rules'),
-    ]).then(([s, p, sel, c, cr]) => {
+      api.get('/people/partners'),
+      api.get('/people/employees'),
+    ]).then(([s, p, sel, c, cr, pt, emp]) => {
       setSales(s.data)
       setProducts(p.data)
       setSellers(sel.data)
       setCustomers(c.data)
       setCommissionRules(cr.data || [])
+      setPartners(pt.data || [])
+      setEmployees(emp.data || [])
     }).finally(() => setLoading(false))
   }
 
@@ -145,11 +151,31 @@ export default function VendasPage() {
     }))
   }
 
+  // Ao trocar a origem: limpa parceiro/colaborador se não fizer mais sentido
+  const selectOrigin = (origin: string) => {
+    setForm((f: any) => ({
+      ...f,
+      origin,
+      partnerId: origin === 'partner' ? f.partnerId : '',
+      employeeId: origin === 'employee' ? f.employeeId : '',
+    }))
+  }
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (form.items.length === 0) {
       alert('Adicione pelo menos um produto antes de salvar a venda.')
+      return
+    }
+
+    if (form.origin === 'partner' && !form.partnerId) {
+      alert('Selecione o parceiro responsável pela indicação.')
+      return
+    }
+
+    if (form.origin === 'employee' && !form.employeeId) {
+      alert('Selecione o colaborador responsável pela indicação.')
       return
     }
 
@@ -267,13 +293,53 @@ export default function VendasPage() {
               <select
                 className="input"
                 value={form.origin}
-                onChange={e => setForm((f: any) => ({ ...f, origin: e.target.value }))}
+                onChange={e => selectOrigin(e.target.value)}
               >
                 {origins.map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
             </div>
+
+            {form.origin === 'partner' && (
+              <div>
+                <label className="label">Parceiro *</label>
+                <select
+                  className="input"
+                  value={form.partnerId || ''}
+                  onChange={e => setForm((f: any) => ({ ...f, partnerId: e.target.value }))}
+                  required
+                >
+                  <option value="">Selecione...</option>
+                  {partners.map((p: any) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+                {partners.length === 0 && (
+                  <p className="text-xs text-amber-600 mt-1">Nenhum parceiro cadastrado — cadastre em Pessoas.</p>
+                )}
+              </div>
+            )}
+
+            {form.origin === 'employee' && (
+              <div>
+                <label className="label">Colaborador Indicador *</label>
+                <select
+                  className="input"
+                  value={form.employeeId || ''}
+                  onChange={e => setForm((f: any) => ({ ...f, employeeId: e.target.value }))}
+                  required
+                >
+                  <option value="">Selecione...</option>
+                  {employees.map((emp: any) => (
+                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                  ))}
+                </select>
+                {employees.length === 0 && (
+                  <p className="text-xs text-amber-600 mt-1">Nenhum colaborador cadastrado — cadastre em Pessoas.</p>
+                )}
+              </div>
+            )}
 
             <div>
               <label className="label">Data da Venda *</label>
