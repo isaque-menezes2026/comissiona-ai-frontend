@@ -62,6 +62,59 @@ function formatAchieved(value: number, type: string) {
   return money(value)
 }
 
+// Gera os próximos N periodKeys a partir de (mas sem incluir) o período
+// informado — usado para oferecer as opções de destino ao duplicar uma meta
+// para vários meses/períodos futuros de uma vez.
+function nextPeriodKeys(periodType: string, periodKey: string, count: number): string[] {
+  const keys: string[] = []
+  if (periodType === 'monthly') {
+    let [y, m] = periodKey.split('-').map(Number)
+    for (let i = 1; i <= count; i++) {
+      let yy = y, mm = m + i
+      while (mm > 12) { mm -= 12; yy += 1 }
+      keys.push(`${yy}-${String(mm).padStart(2, '0')}`)
+    }
+    return keys
+  }
+  if (periodType === 'yearly') {
+    const y = Number(periodKey)
+    for (let i = 1; i <= count; i++) keys.push(`${y + i}`)
+    return keys
+  }
+  if (periodType === 'quarterly') {
+    let [y, q] = periodKey.split('-Q').map(Number)
+    for (let i = 1; i <= count; i++) {
+      let yy = y, qq = q + i
+      while (qq > 4) { qq -= 4; yy += 1 }
+      keys.push(`${yy}-Q${qq}`)
+    }
+    return keys
+  }
+  if (periodType === 'semiannual') {
+    let [y, h] = periodKey.split('-H').map(Number)
+    for (let i = 1; i <= count; i++) {
+      let yy = y, hh = h + i
+      while (hh > 2) { hh -= 2; yy += 1 }
+      keys.push(`${yy}-H${hh}`)
+    }
+    return keys
+  }
+  if (periodType === 'weekly') {
+    let [y, w] = periodKey.replace('W', '-').split('-').map(Number)
+    for (let i = 1; i <= count; i++) {
+      let yy = y, ww = w + i
+      while (ww > 52) { ww -= 52; yy += 1 }
+      keys.push(`${yy}-W${ww}`)
+    }
+    return keys
+  }
+  return []
+}
+
+const duplicateWindowSize: Record<string, number> = {
+  monthly: 12, quarterly: 8, semiannual: 6, yearly: 5, weekly: 12,
+}
+
 const emptyForm = (periodType: string, periodKey: string) => ({
   periodType, periodKey, type: 'revenue', productId: '', targetValue: '', bonusAmount: '',
   startDate: '', endDate: '', active: true,
@@ -79,6 +132,9 @@ export default function MetasPage() {
   const [year] = useState(new Date().getFullYear())
   const [form, setForm] = useState<any>(emptyForm('monthly', getCurrentPeriodKey('monthly')))
   const [history, setHistory] = useState<Record<string, any[]>>({})
+  const [duplicateGoal, setDuplicateGoal] = useState<any | null>(null)
+  const [duplicateTargets, setDuplicateTargets] = useState<Set<string>>(new Set())
+  const [duplicating, setDuplicating] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -162,6 +218,35 @@ export default function MetasPage() {
     load()
   }
 
+  const openDuplicateModal = (g: any) => {
+    setDuplicateGoal(g)
+    setDuplicateTargets(new Set())
+  }
+
+  const toggleDuplicateTarget = (pk: string) => {
+    setDuplicateTargets(prev => {
+      const next = new Set(prev)
+      if (next.has(pk)) next.delete(pk)
+      else next.add(pk)
+      return next
+    })
+  }
+
+  const handleDuplicate = async () => {
+    if (!duplicateGoal || duplicateTargets.size === 0) return
+    setDuplicating(true)
+    try {
+      const { data } = await api.post(`/goals/${duplicateGoal.id}/duplicate`, { periodKeys: Array.from(duplicateTargets) })
+      alert(`${data.count} meta(s) criada(s) com sucesso.`)
+      setDuplicateGoal(null)
+      load()
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Erro ao duplicar meta.')
+    } finally {
+      setDuplicating(false)
+    }
+  }
+
   if (loading) return <LoadingSpinner />
 
   return (
@@ -216,6 +301,7 @@ export default function MetasPage() {
                       <div className="text-xl font-bold text-gray-900">{(g.percentage || 0).toFixed(0)}%</div>
                       {pct >= 100 && <div className="text-xs text-green-600">Meta atingida!</div>}
                     </div>
+                    <button onClick={() => openDuplicateModal(g)} className="text-gray-300 hover:text-blue-500 text-sm" title="Duplicar para outros períodos">⧉</button>
                     <button onClick={() => openEditModal(g)} className="text-gray-300 hover:text-blue-500 text-sm" title="Editar">✎</button>
                     <button onClick={() => handleDelete(g.id)} className="text-gray-300 hover:text-red-500 text-sm" title="Excluir">×</button>
                   </div>
@@ -318,6 +404,49 @@ export default function MetasPage() {
             <button type="submit" disabled={saving} className="btn-primary flex-1">{saving ? 'Salvando...' : editingId ? 'Salvar alterações' : 'Criar Meta'}</button>
           </div>
         </form>
+      </Modal>
+
+      <Modal open={!!duplicateGoal} onClose={() => setDuplicateGoal(null)} title="Duplicar meta para outros períodos">
+        {duplicateGoal && (() => {
+          const options = nextPeriodKeys(duplicateGoal.periodType, duplicateGoal.periodKey, duplicateWindowSize[duplicateGoal.periodType] || 12)
+          const allSelected = options.length > 0 && options.every(pk => duplicateTargets.has(pk))
+          return (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-500">
+                {duplicateGoal.product?.name || 'Meta Geral'} · {formatAchieved(Number(duplicateGoal.targetValue), duplicateGoal.type)} — selecione para quais períodos copiar esta meta (mesmo produto, valor e vendedor).
+              </p>
+              <button
+                type="button"
+                onClick={() => setDuplicateTargets(allSelected ? new Set() : new Set(options))}
+                className="text-xs text-blue-500 hover:underline"
+              >
+                {allSelected ? 'Desmarcar todos' : 'Selecionar todos'}
+              </button>
+              <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+                {options.map(pk => (
+                  <label key={pk} className={`flex items-center gap-1.5 text-sm border rounded-lg px-2 py-1.5 cursor-pointer ${duplicateTargets.has(pk) ? 'border-blue-400 bg-blue-50' : 'border-gray-100 hover:bg-gray-50'}`}>
+                    <input type="checkbox" checked={duplicateTargets.has(pk)} onChange={() => toggleDuplicateTarget(pk)} />
+                    {shortPeriodLabel(duplicateGoal.periodType, pk)}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400">
+                Se algum período de destino já tiver uma meta ativa igual (mesmo produto/vendedor), ela será inativada automaticamente.
+              </p>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setDuplicateGoal(null)} className="btn-secondary flex-1">Cancelar</button>
+                <button
+                  type="button"
+                  disabled={duplicating || duplicateTargets.size === 0}
+                  onClick={handleDuplicate}
+                  className="btn-primary flex-1"
+                >
+                  {duplicating ? 'Duplicando...' : `Duplicar para ${duplicateTargets.size} período(s)`}
+                </button>
+              </div>
+            </div>
+          )
+        })()}
       </Modal>
     </div>
   )
