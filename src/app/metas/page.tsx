@@ -144,9 +144,11 @@ export default function MetasPage() {
     ]).then(([g, p]) => {
       setGoals(g.data)
       setProducts(p.data)
-      // Busca evolução (últimos 6 períodos) de cada meta em paralelo
+      // Busca evolução (últimos 6 períodos) de cada meta em paralelo — metas
+      // compostas (trimestre/semestre/ano somado a partir dos meses) não têm
+      // histórico próprio ainda, então não vale a pena buscar.
       Promise.all(
-        g.data.map((goal: any) =>
+        g.data.filter((goal: any) => !goal.isComposed).map((goal: any) =>
           api.get('/goals/history', {
             params: { periodType, periodKey, productId: goal.productId || '', sellerId: goal.sellerId || '', count: 6 },
           }).then((r: any) => [goal.id, r.data])
@@ -283,9 +285,15 @@ export default function MetasPage() {
                       <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
                         {g.type === 'quantity' ? 'Quantidade' : 'Receita'}
                       </span>
-                      <button onClick={() => toggleActive(g)}>
-                        <Badge color={g.active === false ? 'gray' : 'green'}>{g.active === false ? 'Inativa' : 'Ativa'}</Badge>
-                      </button>
+                      {g.isComposed ? (
+                        <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full" title={`Soma automática de ${g.composedFromMonths} de ${g.composedTotalMonths} meses configurados`}>
+                          Composta ({g.composedFromMonths}/{g.composedTotalMonths} meses)
+                        </span>
+                      ) : (
+                        <button onClick={() => toggleActive(g)}>
+                          <Badge color={g.active === false ? 'gray' : 'green'}>{g.active === false ? 'Inativa' : 'Ativa'}</Badge>
+                        </button>
+                      )}
                       {g.isValid === false && (
                         <span className="text-xs bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded-full">Fora da validade</span>
                       )}
@@ -295,15 +303,24 @@ export default function MetasPage() {
                         Válida: {g.startDate ? date(g.startDate) : '—'} até {g.endDate ? date(g.endDate) : '—'}
                       </div>
                     )}
+                    {g.isComposed && (
+                      <div className="text-xs text-gray-400 mt-1">
+                        Meta somada automaticamente a partir das metas mensais. Crie uma meta manual neste período para substituir a soma.
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="text-right">
                       <div className="text-xl font-bold text-gray-900">{(g.percentage || 0).toFixed(0)}%</div>
                       {pct >= 100 && <div className="text-xs text-green-600">Meta atingida!</div>}
                     </div>
-                    <button onClick={() => openDuplicateModal(g)} className="text-gray-300 hover:text-blue-500 text-sm" title="Duplicar para outros períodos">⧉</button>
-                    <button onClick={() => openEditModal(g)} className="text-gray-300 hover:text-blue-500 text-sm" title="Editar">✎</button>
-                    <button onClick={() => handleDelete(g.id)} className="text-gray-300 hover:text-red-500 text-sm" title="Excluir">×</button>
+                    {!g.isComposed && (
+                      <>
+                        <button onClick={() => openDuplicateModal(g)} className="text-gray-300 hover:text-blue-500 text-sm" title="Duplicar para outros períodos">⧉</button>
+                        <button onClick={() => openEditModal(g)} className="text-gray-300 hover:text-blue-500 text-sm" title="Editar">✎</button>
+                        <button onClick={() => handleDelete(g.id)} className="text-gray-300 hover:text-red-500 text-sm" title="Excluir">×</button>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="w-full bg-gray-100 rounded-full h-2.5 mb-3">
@@ -319,7 +336,7 @@ export default function MetasPage() {
                   </div>
                 )}
 
-                {goalHistory.length > 0 && (
+                {!g.isComposed && goalHistory.length > 0 && (
                   <div className="mt-4 pt-3 border-t border-gray-50">
                     <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Evolução</div>
                     <div className="flex items-end gap-1.5 h-14">
