@@ -11,6 +11,7 @@ import { money, date, monthYear, commissionStatus, commissionType, forecastStatu
 
 export default function ComissoesPage() {
   const [commissions, setCommissions] = useState<any[]>([])
+  const [allCommissions, setAllCommissions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
   const [stats, setStats] = useState<any>(null)
@@ -20,11 +21,21 @@ export default function ComissoesPage() {
   const [fixingScoping, setFixingScoping] = useState(false)
 
   const load = () => {
-    Promise.all([
+    // O resumo por beneficiário sempre olha TODAS as comissões, independente
+    // da aba de status selecionada na tabela abaixo — senão, ao filtrar por
+    // "Previstas" por exemplo, o resumo ficaria incompleto/enganoso.
+    const calls: any[] = [
       api.get('/commissions' + (filter ? `?status=${filter}` : '')),
       api.get('/reports/dashboard'),
-    ]).then(([c, d]) => { setCommissions(c.data); setStats(d.data); setSelected(new Set()) })
-    .finally(() => setLoading(false))
+    ]
+    if (filter) calls.push(api.get('/commissions'))
+
+    Promise.all(calls).then(([c, d, all]) => {
+      setCommissions(c.data)
+      setStats(d.data)
+      setAllCommissions(filter ? all.data : c.data)
+      setSelected(new Set())
+    }).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [filter])
@@ -115,6 +126,30 @@ export default function ComissoesPage() {
   const totalVendidoLiquido = [...uniqueSaleItems.values()].reduce((sum, si) => sum + Number(si.netValue || 0), 0)
   const totalVendidoBruto = [...uniqueSaleItems.values()].reduce((sum, si) => sum + Number(si.grossValue || 0), 0)
 
+  // Resumo por beneficiário: agrupa TODAS as comissões (não só as da aba/filtro
+  // atual) por vendedor/parceiro/colaborador, somando por status. Cancelada não
+  // entra no total, mas mostro à parte pra dar transparência de quanto foi
+  // cancelado daquele beneficiário.
+  const beneficiaryMap = new Map<string, { name: string; type: string; predicted: number; blocked: number; released: number; paid: number; cancelled: number; total: number; count: number }>()
+  allCommissions.forEach((c: any) => {
+    const bene = c.seller || c.partner || c.employee
+    if (!bene) return
+    const type = c.seller ? 'Vendedor' : c.partner ? 'Parceiro' : 'Colaborador'
+    const key = `${type}-${bene.id}`
+    if (!beneficiaryMap.has(key)) {
+      beneficiaryMap.set(key, { name: bene.name, type, predicted: 0, blocked: 0, released: 0, paid: 0, cancelled: 0, total: 0, count: 0 })
+    }
+    const entry = beneficiaryMap.get(key)!
+    const amount = Number(c.amount || 0)
+    if (c.status === 'PREDICTED') entry.predicted += amount
+    else if (c.status === 'BLOCKED') entry.blocked += amount
+    else if (c.status === 'RELEASED') entry.released += amount
+    else if (c.status === 'PAID') entry.paid += amount
+    else if (c.status === 'CANCELLED') entry.cancelled += amount
+    if (c.status !== 'CANCELLED') { entry.total += amount; entry.count += 1 }
+  })
+  const beneficiarySummary = [...beneficiaryMap.values()].sort((a, b) => b.total - a.total)
+
   return (
     <div>
       <PageHeader
@@ -161,6 +196,31 @@ export default function ComissoesPage() {
         </div>
         <span className="text-3xl">🧾</span>
       </div>
+
+      {beneficiarySummary.length > 0 && (
+        <div className="card overflow-hidden mb-6">
+          <div className="px-4 py-3 border-b border-gray-100">
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Resumo por Beneficiário</div>
+            <div className="text-xs text-gray-400">Considera todas as comissões, independente do filtro de status abaixo</div>
+          </div>
+          <Table headers={['Beneficiário', 'Tipo', 'Previsto', 'Bloqueado', 'Liberado', 'Pago', 'Total (sem canceladas)']}>
+            {beneficiarySummary.map(b => (
+              <Tr key={`${b.type}-${b.name}`}>
+                <Td><div className="font-medium">{b.name}</div></Td>
+                <Td><span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{b.type}</span></Td>
+                <Td>{b.predicted > 0 ? money(b.predicted) : <span className="text-gray-300">—</span>}</Td>
+                <Td>{b.blocked > 0 ? money(b.blocked) : <span className="text-gray-300">—</span>}</Td>
+                <Td>{b.released > 0 ? money(b.released) : <span className="text-gray-300">—</span>}</Td>
+                <Td>{b.paid > 0 ? <span className="text-green-600 font-medium">{money(b.paid)}</span> : <span className="text-gray-300">—</span>}</Td>
+                <Td>
+                  <div className="font-semibold text-gray-900">{money(b.total)}</div>
+                  <div className="text-xs text-gray-400">{b.count} comissão(ões){b.cancelled > 0 ? ` · ${money(b.cancelled)} cancelado` : ''}</div>
+                </Td>
+              </Tr>
+            ))}
+          </Table>
+        </div>
+      )}
 
       <div className="card overflow-hidden">
         <div className="flex gap-2 p-4 border-b border-gray-100">
