@@ -11,7 +11,7 @@ import { money, date, saleStatus } from '@/lib/formatters'
 
 const EMPTY_FORM = {
   origin: 'direct',
-  taxRate: 10,
+  taxRate: 14,
   saleDate: new Date().toISOString().slice(0, 10),
   items: [] as any[],
   status: 'CONTRACT_SIGNED',
