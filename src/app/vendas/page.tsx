@@ -198,6 +198,20 @@ export default function VendasPage() {
     }
   }
 
+  // Remove o link do contrato anexado (não apaga o arquivo do storage, só desvincula
+  // da venda). Aplica na hora, sem precisar clicar em "Salvar alterações".
+  const removeContractFile = async () => {
+    if (!editingId) return
+    if (!confirm('Remover o contrato anexado desta venda?')) return
+    try {
+      await api.patch(`/sales/${editingId}`, { contractFileUrl: '' })
+      setForm((f: any) => ({ ...f, contractFileUrl: '' }))
+      load()
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Erro ao remover o arquivo.')
+    }
+  }
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -453,6 +467,11 @@ export default function VendasPage() {
                       onChange={e => uploadContractFile(e.target.files?.[0])}
                     />
                   </label>
+                  {form.contractFileUrl && (
+                    <button type="button" onClick={removeContractFile} className="text-xs text-red-500 hover:underline">
+                      🗑 Remover
+                    </button>
+                  )}
                   {form.contractFileUrl && (
                     <a href={form.contractFileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:underline">
                       Ver arquivo
