@@ -371,6 +371,16 @@ export default function DashboardPage() {
                           <div>
                             <div className="text-sm font-medium text-gray-900">{sale.customer?.companyName}</div>
                             <div className="text-xs text-gray-400">{sale.seller?.name} · {date(sale.saleDate)}</div>
+                            {sale.contractFileUrl && (
+                              <a
+                                href={sale.contractFileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-blue-600 hover:underline"
+                              >
+                                📄 Ver contrato
+                              </a>
+                            )}
                           </div>
                           <Badge color={st.color as any}>{st.label}</Badge>
                         </div>
