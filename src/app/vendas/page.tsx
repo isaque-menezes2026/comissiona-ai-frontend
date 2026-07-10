@@ -74,6 +74,10 @@ export default function VendasPage() {
       setCommissionRules(cr.data || [])
       setPartners(pt.data || [])
       setEmployees(emp.data || [])
+    }).catch((err: any) => {
+      // Sem isso, uma falha de rede/backend deixava a tela de "Nenhuma venda
+      // cadastrada" aparecer silenciosamente — parecendo que os dados sumiram.
+      alert(err.response?.data?.message || 'Erro ao carregar vendas. Tente atualizar a página.')
     }).finally(() => setLoading(false))
   }
 
