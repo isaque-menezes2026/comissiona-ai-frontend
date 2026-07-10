@@ -48,6 +48,7 @@ export default function VendasPage() {
   const [partners, setPartners] = useState<any[]>([])
   const [employees, setEmployees] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
+  const [uploadingContract, setUploadingContract] = useState(false)
   const [commissionRules, setCommissionRules] = useState<any[]>([])
 
   // Modal state
@@ -170,6 +171,31 @@ export default function VendasPage() {
       partnerId: origin === 'partner' ? f.partnerId : '',
       employeeId: origin === 'employee' ? f.employeeId : '',
     }))
+  }
+
+  // Anexo avulso de contrato assinado — pra vendas fechadas fora do portal Kualiz,
+  // sem a integração automática. Só disponível editando uma venda já salva (precisa
+  // do id). Sobe pro Supabase Storage do próprio Comissiona e já preenche o link.
+  const uploadContractFile = async (file: File | undefined) => {
+    if (!file || !editingId) return
+    if (file.type !== 'application/pdf') {
+      alert('Envie um arquivo PDF.')
+      return
+    }
+    setUploadingContract(true)
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      const { data } = await api.post(`/sales/${editingId}/contract-file`, body, {
+        headers: { 'Content-Type': undefined },
+      })
+      setForm((f: any) => ({ ...f, contractFileUrl: data.contractFileUrl }))
+      load()
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Erro ao enviar arquivo.')
+    } finally {
+      setUploadingContract(false)
+    }
   }
 
   const handleSave = async (e: React.FormEvent) => {
@@ -413,6 +439,29 @@ export default function VendasPage() {
                 onChange={e => setForm((f: any) => ({ ...f, contractFileUrl: e.target.value }))}
                 placeholder="https://... (preenchido automaticamente pelo portal Kualiz)"
               />
+              {editingId ? (
+                <div className="mt-1.5 flex items-center gap-3">
+                  <label className="text-xs text-blue-600 hover:underline cursor-pointer">
+                    {uploadingContract
+                      ? 'Enviando...'
+                      : form.contractFileUrl ? '📎 Substituir PDF' : '📎 Anexar PDF do contrato'}
+                    <input
+                      type="file"
+                      accept="application/pdf"
+                      className="hidden"
+                      disabled={uploadingContract}
+                      onChange={e => uploadContractFile(e.target.files?.[0])}
+                    />
+                  </label>
+                  {form.contractFileUrl && (
+                    <a href={form.contractFileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:underline">
+                      Ver arquivo
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 mt-1">Salve a venda primeiro para poder anexar o PDF direto aqui.</p>
+              )}
             </div>
 
             <div>
