@@ -19,6 +19,10 @@ export default function ComissoesPage() {
   const [marking, setMarking] = useState(false)
   const [refreshingText, setRefreshingText] = useState(false)
   const [fixingScoping, setFixingScoping] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  // Por padrão, oculta as canceladas na aba "Todas" (ainda podem ser vistas
+  // na aba "Cancelada"). Excluídas nunca aparecem, pois saem do banco.
+  const [hideCancelled, setHideCancelled] = useState(true)
 
   const load = () => {
     // O resumo por beneficiário sempre olha TODAS as comissões, independente
@@ -53,7 +57,7 @@ export default function ComissoesPage() {
   }
 
   const toggleSelectAll = () => {
-    const selectableIds = commissions.filter(isSelectable).map(c => c.id)
+    const selectableIds = visibleCommissions.filter(isSelectable).map(c => c.id)
     const allSelected = selectableIds.length > 0 && selectableIds.every(id => selected.has(id))
     setSelected(allSelected ? new Set() : new Set(selectableIds))
   }
@@ -109,9 +113,31 @@ export default function ComissoesPage() {
     }
   }
 
+  // Exclusão definitiva (chama o DELETE do backend, que já bloqueia comissão
+  // paga ou vinculada a lote de pagamento). Cancelada e prevista podem ser excluídas.
+  const handleDelete = async (id: string) => {
+    if (!confirm('Excluir esta comissão definitivamente? Essa ação não pode ser desfeita.')) return
+    setDeletingId(id)
+    try {
+      const { data } = await api.delete(`/commissions/${id}`)
+      alert(data.message || 'Comissão excluída com sucesso.')
+      load()
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Erro ao excluir comissão.')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   if (loading) return <LoadingSpinner />
 
-  const selectableCount = commissions.filter(isSelectable).length
+  // Na aba "Todas", com o toggle ligado, some com as canceladas da lista
+  // (elas continuam existindo e acessíveis pela aba "Cancelada").
+  const visibleCommissions = filter === '' && hideCancelled
+    ? commissions.filter((c: any) => c.status !== 'CANCELLED')
+    : commissions
+
+  const selectableCount = visibleCommissions.filter(isSelectable).length
 
   // Total vendido (com base nos itens de venda por trás das comissões listadas).
   // Deduplicado por saleItemId: um mesmo item de venda pode gerar mais de uma
@@ -223,29 +249,37 @@ export default function ComissoesPage() {
       )}
 
       <div className="card overflow-hidden">
-        <div className="flex gap-2 p-4 border-b border-gray-100">
-          {['', 'PREDICTED', 'RELEASED', 'PAID', 'BLOCKED', 'CANCELLED'].map(s => (
-            <button key={s} onClick={() => setFilter(s)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filter === s ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              {s === '' ? 'Todas' : commissionStatus[s]?.label || s}
-            </button>
-          ))}
+        <div className="flex items-center justify-between p-4 border-b border-gray-100">
+          <div className="flex gap-2">
+            {['', 'PREDICTED', 'RELEASED', 'PAID', 'BLOCKED', 'CANCELLED'].map(s => (
+              <button key={s} onClick={() => setFilter(s)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filter === s ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                {s === '' ? 'Todas' : commissionStatus[s]?.label || s}
+              </button>
+            ))}
+          </div>
+          {filter === '' && (
+            <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer select-none">
+              <input type="checkbox" checked={hideCancelled} onChange={() => setHideCancelled(v => !v)} />
+              Ocultar canceladas
+            </label>
+          )}
         </div>
         {selectableCount > 0 && (
           <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-50 text-xs text-gray-500">
             <input
               type="checkbox"
-              checked={commissions.filter(isSelectable).every(c => selected.has(c.id))}
+              checked={visibleCommissions.filter(isSelectable).every(c => selected.has(c.id))}
               onChange={toggleSelectAll}
             />
             <span>Selecionar todas as elegíveis para pagamento ({selectableCount})</span>
           </div>
         )}
-        {commissions.length === 0 ? (
-          <EmptyState icon="💰" title="Nenhuma comissao encontrada" description="As comissoes sao calculadas automaticamente quando uma venda e cadastrada." />
+        {visibleCommissions.length === 0 ? (
+          <EmptyState icon="💰" title="Nenhuma comissao encontrada" description={commissions.length > 0 ? 'Todas as comissões desta aba estão ocultas (canceladas). Desmarque "Ocultar canceladas" para vê-las.' : 'As comissoes sao calculadas automaticamente quando uma venda e cadastrada.'} />
         ) : (
-          <Table headers={['', 'Beneficiario', 'Produto', 'Cliente', 'Tipo', 'Venda', 'Comissão', 'Previsao', 'Status']}>
-            {commissions.map((c: any) => {
+          <Table headers={['', 'Beneficiario', 'Produto', 'Cliente', 'Tipo', 'Venda', 'Comissão', 'Previsao', 'Status', 'Ações']}>
+            {visibleCommissions.map((c: any) => {
               const st = commissionStatus[c.status] || { label: c.status, color: 'gray' }
               const bene = c.seller?.name || c.partner?.name || c.employee?.name || '—'
               const selectable = isSelectable(c)
@@ -282,6 +316,17 @@ export default function ComissoesPage() {
                     ) : <span className="text-gray-300">—</span>}
                   </Td>
                   <Td><Badge color={st.color as any}>{st.label}</Badge></Td>
+                  <Td>
+                    {c.status !== 'PAID' && (
+                      <button
+                        onClick={() => handleDelete(c.id)}
+                        disabled={deletingId === c.id}
+                        className="text-xs text-red-500 hover:underline disabled:opacity-50"
+                      >
+                        {deletingId === c.id ? 'Excluindo...' : 'Excluir'}
+                      </button>
+                    )}
+                  </Td>
                 </Tr>
               )
             })}
