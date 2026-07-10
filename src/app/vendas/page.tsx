@@ -98,6 +98,7 @@ export default function VendasPage() {
       saleDate: data.saleDate?.slice(0, 10) || '',
       contractDate: data.contractDate?.slice(0, 10) || '',
       billingStartDate: data.billingStartDate?.slice(0, 10) || '',
+      contractFileUrl: data.contractFileUrl || '',
       notes: data.notes || '',
       status: data.status,
       items: (data.items || []).map((item: any) => ({
@@ -235,7 +236,20 @@ export default function VendasPage() {
               const st = saleStatus[s.status] || { label: s.status, color: 'gray' }
               return (
                 <Tr key={s.id}>
-                  <Td><div className="font-medium">{s.customer?.companyName || '—'}</div></Td>
+                  <Td>
+                    <div className="font-medium">{s.customer?.companyName || '—'}</div>
+                    {s.contractFileUrl && (
+                      <a
+                        href={s.contractFileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:underline"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        📄 Ver contrato
+                      </a>
+                    )}
+                  </Td>
                   <Td><div className="text-gray-600">{s.seller?.name || '—'}</div></Td>
                   <Td><div className="text-xs text-gray-500">{origins.find(o => o.value === s.origin)?.label || s.origin}</div></Td>
                   <Td>{date(s.saleDate)}</Td>
@@ -387,6 +401,17 @@ export default function VendasPage() {
                 className="input"
                 value={form.billingStartDate || ''}
                 onChange={e => setForm((f: any) => ({ ...f, billingStartDate: e.target.value }))}
+              />
+            </div>
+
+            <div>
+              <label className="label">Link do Contrato</label>
+              <input
+                type="url"
+                className="input"
+                value={form.contractFileUrl || ''}
+                onChange={e => setForm((f: any) => ({ ...f, contractFileUrl: e.target.value }))}
+                placeholder="https://... (preenchido automaticamente pelo portal Kualiz)"
               />
             </div>
 
