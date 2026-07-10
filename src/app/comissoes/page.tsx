@@ -19,9 +19,9 @@ export default function ComissoesPage() {
   const [marking, setMarking] = useState(false)
   const [refreshingText, setRefreshingText] = useState(false)
   const [fixingScoping, setFixingScoping] = useState(false)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
   // Por padrão, oculta as canceladas na aba "Todas" (ainda podem ser vistas
-  // na aba "Cancelada"). Excluídas nunca aparecem, pois saem do banco.
+  // na aba "Cancelada"). Não há exclusão por aqui de propósito: exclusão de
+  // comissão deve ser feita a partir da venda de origem, não nesta tela.
   const [hideCancelled, setHideCancelled] = useState(true)
 
   const load = () => {
@@ -110,22 +110,6 @@ export default function ComissoesPage() {
       alert(err.response?.data?.message || 'Erro ao corrigir escopo das regras.')
     } finally {
       setFixingScoping(false)
-    }
-  }
-
-  // Exclusão definitiva (chama o DELETE do backend, que já bloqueia comissão
-  // paga ou vinculada a lote de pagamento). Cancelada e prevista podem ser excluídas.
-  const handleDelete = async (id: string) => {
-    if (!confirm('Excluir esta comissão definitivamente? Essa ação não pode ser desfeita.')) return
-    setDeletingId(id)
-    try {
-      const { data } = await api.delete(`/commissions/${id}`)
-      alert(data.message || 'Comissão excluída com sucesso.')
-      load()
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Erro ao excluir comissão.')
-    } finally {
-      setDeletingId(null)
     }
   }
 
@@ -278,7 +262,7 @@ export default function ComissoesPage() {
         {visibleCommissions.length === 0 ? (
           <EmptyState icon="💰" title="Nenhuma comissao encontrada" description={commissions.length > 0 ? 'Todas as comissões desta aba estão ocultas (canceladas). Desmarque "Ocultar canceladas" para vê-las.' : 'As comissoes sao calculadas automaticamente quando uma venda e cadastrada.'} />
         ) : (
-          <Table headers={['', 'Beneficiario', 'Produto', 'Cliente', 'Tipo', 'Venda', 'Comissão', 'Previsao', 'Status', 'Ações']}>
+          <Table headers={['', 'Beneficiario', 'Produto', 'Cliente', 'Tipo', 'Venda', 'Comissão', 'Previsao', 'Status']}>
             {visibleCommissions.map((c: any) => {
               const st = commissionStatus[c.status] || { label: c.status, color: 'gray' }
               const bene = c.seller?.name || c.partner?.name || c.employee?.name || '—'
@@ -316,17 +300,6 @@ export default function ComissoesPage() {
                     ) : <span className="text-gray-300">—</span>}
                   </Td>
                   <Td><Badge color={st.color as any}>{st.label}</Badge></Td>
-                  <Td>
-                    {c.status !== 'PAID' && (
-                      <button
-                        onClick={() => handleDelete(c.id)}
-                        disabled={deletingId === c.id}
-                        className="text-xs text-red-500 hover:underline disabled:opacity-50"
-                      >
-                        {deletingId === c.id ? 'Excluindo...' : 'Excluir'}
-                      </button>
-                    )}
-                  </Td>
                 </Tr>
               )
             })}
