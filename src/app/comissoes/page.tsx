@@ -7,7 +7,7 @@ import Table, { Tr, Td } from '@/components/ui/Table'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
 import StatCard from '@/components/ui/StatCard'
-import { money, date, monthYear, commissionStatus, commissionType, forecastStatusLabel } from '@/lib/formatters'
+import { money, date, monthYear, commissionStatus, commissionType } from '@/lib/formatters'
 
 export default function ComissoesPage() {
   const [commissions, setCommissions] = useState<any[]>([])
@@ -128,7 +128,10 @@ export default function ComissoesPage() {
   const thisMonthKey = new Date().toISOString().slice(0, 7)
   const isPendingPayment = (c: any) => c.status !== 'PAID' && c.status !== 'CANCELLED'
   const isOverdue = (c: any) => isPendingPayment(c) && !!c.dateExpectedRelease && c.dateExpectedRelease.slice(0, 10) < today
-  const isDueThisMonth = (c: any) => isPendingPayment(c) && c.expectedPaymentCompetence === thisMonthKey
+  // "Este mês" só conta o que AINDA NÃO venceu (senão uma comissão vencida em
+  // julho apareceria nos dois grupos ao mesmo tempo, e os dois totais nunca
+  // baterim com a soma — os dois grupos são mutuamente exclusivos de propósito).
+  const isDueThisMonth = (c: any) => isPendingPayment(c) && !isOverdue(c) && c.expectedPaymentCompetence === thisMonthKey
   const beneficiaryKey = (c: any) => {
     const bene = c.seller || c.partner || c.employee
     if (!bene) return null
@@ -240,15 +243,22 @@ export default function ComissoesPage() {
       )}
 
       <div className="card p-5 mb-6">
-        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">A Pagar Agora</div>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Total a Pagar Agora</div>
+            <div className="text-3xl font-bold text-gray-900 mt-1">{money(totalOverdue + totalDueThisMonth)}</div>
+            <div className="text-xs text-gray-400 mt-0.5">{countOverdue + countDueThisMonth} comissão(ões) já vencidas ou a vencer em {monthYear(thisMonthKey)} — soma das duas categorias abaixo</div>
+          </div>
+          <span className="text-3xl">⏰</span>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <button
             type="button"
             onClick={() => { setFilter(''); setDueFilter(dueFilter === 'overdue' ? '' : 'overdue') }}
             className={`text-left p-4 rounded-lg border transition-colors ${dueFilter === 'overdue' ? 'border-red-400 bg-red-50' : 'border-red-100 bg-red-50/40 hover:bg-red-50'}`}
           >
-            <div className="text-xs font-medium text-red-600 uppercase tracking-wide">🔴 Vencidas</div>
-            <div className="text-2xl font-bold text-red-700 mt-1">{money(totalOverdue)}</div>
+            <div className="text-xs font-medium text-red-600 uppercase tracking-wide">🔴 Já Vencidas</div>
+            <div className="text-xl font-bold text-red-700 mt-1">{money(totalOverdue)}</div>
             <div className="text-xs text-red-400 mt-0.5">{countOverdue} comissão(ões) já passaram da data prevista</div>
           </button>
           <button
@@ -256,9 +266,9 @@ export default function ComissoesPage() {
             onClick={() => { setFilter(''); setDueFilter(dueFilter === 'thisMonth' ? '' : 'thisMonth') }}
             className={`text-left p-4 rounded-lg border transition-colors ${dueFilter === 'thisMonth' ? 'border-amber-400 bg-amber-50' : 'border-amber-100 bg-amber-50/40 hover:bg-amber-50'}`}
           >
-            <div className="text-xs font-medium text-amber-600 uppercase tracking-wide">🟡 Vencem Este Mês</div>
-            <div className="text-2xl font-bold text-amber-700 mt-1">{money(totalDueThisMonth)}</div>
-            <div className="text-xs text-amber-500 mt-0.5">{countDueThisMonth} comissão(ões) previstas para {monthYear(thisMonthKey)}</div>
+            <div className="text-xs font-medium text-amber-600 uppercase tracking-wide">🟡 A Vencer Este Mês</div>
+            <div className="text-xl font-bold text-amber-700 mt-1">{money(totalDueThisMonth)}</div>
+            <div className="text-xs text-amber-500 mt-0.5">{countDueThisMonth} comissão(ões) ainda dentro do prazo, previstas para {monthYear(thisMonthKey)}</div>
           </button>
         </div>
         {(dueFilter || beneficiaryFilter) && (
@@ -339,7 +349,7 @@ export default function ComissoesPage() {
             <button
               onClick={() => setDueFilter(dueFilter === 'thisMonth' ? '' : 'thisMonth')}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${dueFilter === 'thisMonth' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}>
-              🟡 Este mês
+              🟡 A vencer este mês
             </button>
           </div>
 
@@ -417,13 +427,18 @@ export default function ComissoesPage() {
                   <Td>
                     {c.dateExpectedRelease ? (
                       <div>
-                        <div className={`text-xs font-medium ${isOverdue(c) ? 'text-red-600' : 'text-gray-900'}`}>
-                          {date(c.dateExpectedRelease)} <span className={isOverdue(c) ? 'text-red-400' : 'text-gray-400'}>({monthYear(c.expectedPaymentCompetence)})</span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`text-xs font-medium ${isOverdue(c) ? 'text-red-600' : 'text-gray-900'}`}>
+                            {date(c.dateExpectedRelease)} <span className="text-gray-400">({monthYear(c.expectedPaymentCompetence)})</span>
+                          </span>
+                          {isOverdue(c) && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">VENCIDA</span>
+                          )}
+                          {isDueThisMonth(c) && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-600">ESTE MÊS</span>
+                          )}
                         </div>
-                        <div className="text-xs text-gray-500">{c.forecastReason}</div>
-                        {isOverdue(c) && <div className="text-xs text-red-500 font-medium">🔴 Vencida</div>}
-                        {!isOverdue(c) && isDueThisMonth(c) && <div className="text-xs text-amber-500 font-medium">🟡 Vence este mês</div>}
-                        {c.forecastStatus && <div className="text-xs text-blue-500">{forecastStatusLabel[c.forecastStatus] || c.forecastStatus}</div>}
+                        <div className="text-xs text-gray-500 mt-0.5">{c.forecastReason}</div>
                       </div>
                     ) : <span className="text-gray-300">—</span>}
                   </Td>
