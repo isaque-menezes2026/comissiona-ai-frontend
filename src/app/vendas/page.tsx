@@ -234,6 +234,14 @@ export default function VendasPage() {
       return
     }
 
+    // Vendedor só é obrigatório fora de vendas de parceiro. Numa venda de parceiro,
+    // o vendedor é opcional: se o parceiro indicou E fechou sozinho, não há
+    // vendedor interno envolvido — só a comissão do parceiro se aplica.
+    if (form.origin !== 'partner' && !form.sellerId) {
+      alert('Selecione o vendedor responsável pela venda.')
+      return
+    }
+
     setSaving(true)
     try {
       if (editingId) {
@@ -350,18 +358,25 @@ export default function VendasPage() {
             </div>
 
             <div>
-              <label className="label">Vendedor *</label>
+              <label className="label">Vendedor{form.origin !== 'partner' ? ' *' : ''}</label>
               <select
                 className="input"
                 value={form.sellerId || ''}
                 onChange={e => setForm((f: any) => ({ ...f, sellerId: e.target.value }))}
-                required
+                required={form.origin !== 'partner'}
               >
-                <option value="">Selecione...</option>
+                <option value="">
+                  {form.origin === 'partner' ? 'Nenhum (parceiro indicou e fechou sozinho)' : 'Selecione...'}
+                </option>
                 {sellers.map((s: any) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
+              {form.origin === 'partner' && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Deixe em branco se o parceiro indicou e fechou a venda sozinho — só a comissão do parceiro será gerada.
+                </p>
+              )}
             </div>
 
             <div>
