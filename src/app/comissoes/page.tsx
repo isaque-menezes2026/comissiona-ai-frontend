@@ -23,6 +23,11 @@ export default function ComissoesPage() {
   // na aba "Cancelada"). Não há exclusão por aqui de propósito: exclusão de
   // comissão deve ser feita a partir da venda de origem, não nesta tela.
   const [hideCancelled, setHideCancelled] = useState(true)
+  // Filtros novos para facilitar a rotina de pagamento: por beneficiário
+  // específico e por urgência de vencimento (o que já venceu ou vence
+  // dentro do mês corrente, com base em dateExpectedRelease/expectedPaymentCompetence).
+  const [beneficiaryFilter, setBeneficiaryFilter] = useState('')
+  const [dueFilter, setDueFilter] = useState<'' | 'overdue' | 'thisMonth'>('')
 
   const load = () => {
     // O resumo por beneficiário sempre olha TODAS as comissões, independente
@@ -115,11 +120,38 @@ export default function ComissoesPage() {
 
   if (loading) return <LoadingSpinner />
 
+  // "Vencida" = já passou da data prevista de liberação/pagamento e ainda não
+  // foi paga nem cancelada. "Este mês" = a competência prevista de pagamento
+  // cai no mês corrente. Serve pra separar o que precisa de atenção AGORA do
+  // que é só previsão distante.
+  const today = new Date().toISOString().slice(0, 10)
+  const thisMonthKey = new Date().toISOString().slice(0, 7)
+  const isPendingPayment = (c: any) => c.status !== 'PAID' && c.status !== 'CANCELLED'
+  const isOverdue = (c: any) => isPendingPayment(c) && !!c.dateExpectedRelease && c.dateExpectedRelease.slice(0, 10) < today
+  const isDueThisMonth = (c: any) => isPendingPayment(c) && c.expectedPaymentCompetence === thisMonthKey
+  const beneficiaryKey = (c: any) => {
+    const bene = c.seller || c.partner || c.employee
+    if (!bene) return null
+    const type = c.seller ? 'Vendedor' : c.partner ? 'Parceiro' : 'Colaborador'
+    return { key: `${type}-${bene.id}`, type, name: bene.name }
+  }
+
   // Na aba "Todas", com o toggle ligado, some com as canceladas da lista
-  // (elas continuam existindo e acessíveis pela aba "Cancelada").
-  const visibleCommissions = filter === '' && hideCancelled
+  // (elas continuam existindo e acessíveis pela aba "Cancelada"). Em seguida
+  // aplica os filtros de beneficiário e de vencimento, que funcionam em
+  // conjunto com a aba de status e entre si.
+  const visibleCommissions = (filter === '' && hideCancelled
     ? commissions.filter((c: any) => c.status !== 'CANCELLED')
     : commissions
+  ).filter((c: any) => {
+    if (beneficiaryFilter) {
+      const bk = beneficiaryKey(c)
+      if (!bk || bk.key !== beneficiaryFilter) return false
+    }
+    if (dueFilter === 'overdue' && !isOverdue(c)) return false
+    if (dueFilter === 'thisMonth' && !isDueThisMonth(c)) return false
+    return true
+  })
 
   const selectableCount = visibleCommissions.filter(isSelectable).length
 
@@ -140,25 +172,34 @@ export default function ComissoesPage() {
   // atual) por vendedor/parceiro/colaborador, somando por status. Cancelada não
   // entra no total, mas mostro à parte pra dar transparência de quanto foi
   // cancelado daquele beneficiário.
-  const beneficiaryMap = new Map<string, { name: string; type: string; predicted: number; blocked: number; released: number; paid: number; cancelled: number; total: number; count: number }>()
+  const beneficiaryMap = new Map<string, { key: string; name: string; type: string; predicted: number; blocked: number; released: number; paid: number; cancelled: number; overdue: number; dueThisMonth: number; total: number; count: number }>()
   allCommissions.forEach((c: any) => {
-    const bene = c.seller || c.partner || c.employee
-    if (!bene) return
-    const type = c.seller ? 'Vendedor' : c.partner ? 'Parceiro' : 'Colaborador'
-    const key = `${type}-${bene.id}`
-    if (!beneficiaryMap.has(key)) {
-      beneficiaryMap.set(key, { name: bene.name, type, predicted: 0, blocked: 0, released: 0, paid: 0, cancelled: 0, total: 0, count: 0 })
+    const bk = beneficiaryKey(c)
+    if (!bk) return
+    if (!beneficiaryMap.has(bk.key)) {
+      beneficiaryMap.set(bk.key, { key: bk.key, name: bk.name, type: bk.type, predicted: 0, blocked: 0, released: 0, paid: 0, cancelled: 0, overdue: 0, dueThisMonth: 0, total: 0, count: 0 })
     }
-    const entry = beneficiaryMap.get(key)!
+    const entry = beneficiaryMap.get(bk.key)!
     const amount = Number(c.amount || 0)
     if (c.status === 'PREDICTED') entry.predicted += amount
     else if (c.status === 'BLOCKED') entry.blocked += amount
     else if (c.status === 'RELEASED') entry.released += amount
     else if (c.status === 'PAID') entry.paid += amount
     else if (c.status === 'CANCELLED') entry.cancelled += amount
+    if (isOverdue(c)) entry.overdue += amount
+    if (isDueThisMonth(c)) entry.dueThisMonth += amount
     if (c.status !== 'CANCELLED') { entry.total += amount; entry.count += 1 }
   })
-  const beneficiarySummary = [...beneficiaryMap.values()].sort((a, b) => b.total - a.total)
+  const beneficiarySummary = [...beneficiaryMap.values()].sort((a, b) => (b.overdue + b.dueThisMonth) - (a.overdue + a.dueThisMonth) || b.total - a.total)
+  const beneficiaryOptions = [...beneficiaryMap.values()].sort((a, b) => a.name.localeCompare(b.name))
+
+  // Total "a pagar agora" (vencido + dentro do mês corrente), sempre calculado
+  // sobre TODAS as comissões (independe da aba/filtro selecionado), pra dar
+  // um número confiável de referência pro financeiro.
+  const totalOverdue = beneficiarySummary.reduce((sum, b) => sum + b.overdue, 0)
+  const totalDueThisMonth = beneficiarySummary.reduce((sum, b) => sum + b.dueThisMonth, 0)
+  const countOverdue = allCommissions.filter(isOverdue).length
+  const countDueThisMonth = allCommissions.filter(isDueThisMonth).length
 
   return (
     <div>
@@ -198,6 +239,39 @@ export default function ComissoesPage() {
         </div>
       )}
 
+      <div className="card p-5 mb-6">
+        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">A Pagar Agora</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => { setFilter(''); setDueFilter(dueFilter === 'overdue' ? '' : 'overdue') }}
+            className={`text-left p-4 rounded-lg border transition-colors ${dueFilter === 'overdue' ? 'border-red-400 bg-red-50' : 'border-red-100 bg-red-50/40 hover:bg-red-50'}`}
+          >
+            <div className="text-xs font-medium text-red-600 uppercase tracking-wide">🔴 Vencidas</div>
+            <div className="text-2xl font-bold text-red-700 mt-1">{money(totalOverdue)}</div>
+            <div className="text-xs text-red-400 mt-0.5">{countOverdue} comissão(ões) já passaram da data prevista</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setFilter(''); setDueFilter(dueFilter === 'thisMonth' ? '' : 'thisMonth') }}
+            className={`text-left p-4 rounded-lg border transition-colors ${dueFilter === 'thisMonth' ? 'border-amber-400 bg-amber-50' : 'border-amber-100 bg-amber-50/40 hover:bg-amber-50'}`}
+          >
+            <div className="text-xs font-medium text-amber-600 uppercase tracking-wide">🟡 Vencem Este Mês</div>
+            <div className="text-2xl font-bold text-amber-700 mt-1">{money(totalDueThisMonth)}</div>
+            <div className="text-xs text-amber-500 mt-0.5">{countDueThisMonth} comissão(ões) previstas para {monthYear(thisMonthKey)}</div>
+          </button>
+        </div>
+        {(dueFilter || beneficiaryFilter) && (
+          <button
+            type="button"
+            onClick={() => { setDueFilter(''); setBeneficiaryFilter('') }}
+            className="text-xs text-blue-600 hover:underline mt-3"
+          >
+            Limpar filtros de vencimento/beneficiário
+          </button>
+        )}
+      </div>
+
       <div className="card p-5 mb-6 flex items-center justify-between">
         <div>
           <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Total Vendido (itens listados abaixo)</div>
@@ -209,18 +283,31 @@ export default function ComissoesPage() {
 
       {beneficiarySummary.length > 0 && (
         <div className="card overflow-hidden mb-6">
-          <div className="px-4 py-3 border-b border-gray-100">
-            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Resumo por Beneficiário</div>
-            <div className="text-xs text-gray-400">Considera todas as comissões, independente do filtro de status abaixo</div>
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Resumo por Beneficiário</div>
+              <div className="text-xs text-gray-400">Considera todas as comissões, independente do filtro de status abaixo — clique numa linha pra filtrar a tabela por essa pessoa</div>
+            </div>
+            {beneficiaryFilter && (
+              <button type="button" onClick={() => setBeneficiaryFilter('')} className="text-xs text-blue-600 hover:underline">
+                Ver todos
+              </button>
+            )}
           </div>
-          <Table headers={['Beneficiário', 'Tipo', 'Previsto', 'Bloqueado', 'Liberado', 'Pago', 'Total (sem canceladas)']}>
+          <Table headers={['Beneficiário', 'Tipo', 'Vencido', 'Este mês', 'Pago', 'Total (sem canceladas)']}>
             {beneficiarySummary.map(b => (
-              <Tr key={`${b.type}-${b.name}`}>
-                <Td><div className="font-medium">{b.name}</div></Td>
+              <Tr
+                key={b.key}
+                onClick={() => setBeneficiaryFilter(beneficiaryFilter === b.key ? '' : b.key)}
+              >
+                <Td className={beneficiaryFilter === b.key ? 'bg-blue-50' : ''}>
+                  <div className={`font-medium ${beneficiaryFilter === b.key ? 'text-blue-700' : ''}`}>
+                    {beneficiaryFilter === b.key ? '▶ ' : ''}{b.name}
+                  </div>
+                </Td>
                 <Td><span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{b.type}</span></Td>
-                <Td>{b.predicted > 0 ? money(b.predicted) : <span className="text-gray-300">—</span>}</Td>
-                <Td>{b.blocked > 0 ? money(b.blocked) : <span className="text-gray-300">—</span>}</Td>
-                <Td>{b.released > 0 ? money(b.released) : <span className="text-gray-300">—</span>}</Td>
+                <Td>{b.overdue > 0 ? <span className="text-red-600 font-medium">{money(b.overdue)}</span> : <span className="text-gray-300">—</span>}</Td>
+                <Td>{b.dueThisMonth > 0 ? <span className="text-amber-600 font-medium">{money(b.dueThisMonth)}</span> : <span className="text-gray-300">—</span>}</Td>
                 <Td>{b.paid > 0 ? <span className="text-green-600 font-medium">{money(b.paid)}</span> : <span className="text-gray-300">—</span>}</Td>
                 <Td>
                   <div className="font-semibold text-gray-900">{money(b.total)}</div>
@@ -233,8 +320,8 @@ export default function ComissoesPage() {
       )}
 
       <div className="card overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b border-gray-100">
-          <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-3 p-4 border-b border-gray-100">
+          <div className="flex gap-2 flex-wrap">
             {['', 'PREDICTED', 'RELEASED', 'PAID', 'BLOCKED', 'CANCELLED'].map(s => (
               <button key={s} onClick={() => setFilter(s)}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filter === s ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
@@ -242,6 +329,33 @@ export default function ComissoesPage() {
               </button>
             ))}
           </div>
+
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => setDueFilter(dueFilter === 'overdue' ? '' : 'overdue')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${dueFilter === 'overdue' ? 'bg-red-500 text-white' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
+              🔴 Vencidas
+            </button>
+            <button
+              onClick={() => setDueFilter(dueFilter === 'thisMonth' ? '' : 'thisMonth')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${dueFilter === 'thisMonth' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}>
+              🟡 Este mês
+            </button>
+          </div>
+
+          <select
+            className="input !w-auto text-sm py-1.5"
+            value={beneficiaryFilter}
+            onChange={e => setBeneficiaryFilter(e.target.value)}
+          >
+            <option value="">Todos os beneficiários</option>
+            {beneficiaryOptions.map(b => (
+              <option key={b.key} value={b.key}>{b.name} ({b.type})</option>
+            ))}
+          </select>
+
+          <div className="flex-1" />
+
           {filter === '' && (
             <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer select-none">
               <input type="checkbox" checked={hideCancelled} onChange={() => setHideCancelled(v => !v)} />
@@ -260,7 +374,17 @@ export default function ComissoesPage() {
           </div>
         )}
         {visibleCommissions.length === 0 ? (
-          <EmptyState icon="💰" title="Nenhuma comissao encontrada" description={commissions.length > 0 ? 'Todas as comissões desta aba estão ocultas (canceladas). Desmarque "Ocultar canceladas" para vê-las.' : 'As comissoes sao calculadas automaticamente quando uma venda e cadastrada.'} />
+          <EmptyState
+            icon="💰"
+            title="Nenhuma comissao encontrada"
+            description={
+              beneficiaryFilter || dueFilter
+                ? 'Nenhuma comissão bate com os filtros de beneficiário/vencimento selecionados. Tente limpar algum deles.'
+                : commissions.length > 0
+                  ? 'Todas as comissões desta aba estão ocultas (canceladas). Desmarque "Ocultar canceladas" para vê-las.'
+                  : 'As comissoes sao calculadas automaticamente quando uma venda e cadastrada.'
+            }
+          />
         ) : (
           <Table headers={['', 'Beneficiario', 'Produto', 'Cliente', 'Tipo', 'Venda', 'Comissão', 'Previsao', 'Status']}>
             {visibleCommissions.map((c: any) => {
@@ -293,8 +417,12 @@ export default function ComissoesPage() {
                   <Td>
                     {c.dateExpectedRelease ? (
                       <div>
-                        <div className="text-xs font-medium text-gray-900">{date(c.dateExpectedRelease)} <span className="text-gray-400">({monthYear(c.expectedPaymentCompetence)})</span></div>
+                        <div className={`text-xs font-medium ${isOverdue(c) ? 'text-red-600' : 'text-gray-900'}`}>
+                          {date(c.dateExpectedRelease)} <span className={isOverdue(c) ? 'text-red-400' : 'text-gray-400'}>({monthYear(c.expectedPaymentCompetence)})</span>
+                        </div>
                         <div className="text-xs text-gray-500">{c.forecastReason}</div>
+                        {isOverdue(c) && <div className="text-xs text-red-500 font-medium">🔴 Vencida</div>}
+                        {!isOverdue(c) && isDueThisMonth(c) && <div className="text-xs text-amber-500 font-medium">🟡 Vence este mês</div>}
                         {c.forecastStatus && <div className="text-xs text-blue-500">{forecastStatusLabel[c.forecastStatus] || c.forecastStatus}</div>}
                       </div>
                     ) : <span className="text-gray-300">—</span>}
