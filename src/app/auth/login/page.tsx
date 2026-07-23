@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/auth.store'
+import PasswordInput from '@/components/ui/PasswordInput'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -40,7 +41,7 @@ export default function LoginPage() {
             </div>
             <div>
               <label className="label">Senha</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="input" placeholder="..." required />
+              <PasswordInput value={password} onChange={e => setPassword(e.target.value)} placeholder="..." required />
             </div>
             <button type="submit" disabled={loading} className="btn-primary w-full mt-2 py-2.5">
               {loading ? 'Entrando...' : 'Entrar'}
