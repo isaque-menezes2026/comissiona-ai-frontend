@@ -7,6 +7,7 @@ import Badge from '@/components/ui/Badge'
 import Table, { Tr, Td } from '@/components/ui/Table'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import Modal from '@/components/ui/Modal'
+import PasswordInput from '@/components/ui/PasswordInput'
 
 export default function UsuariosPage() {
   const { user } = useAuthStore()
@@ -98,7 +99,7 @@ export default function UsuariosPage() {
         <form onSubmit={handleReset} className="space-y-4">
           <div>
             <label className="label">Nova senha *</label>
-            <input type="password" className="input" minLength={6} value={resetPassword} onChange={e => setResetPassword(e.target.value)} required />
+            <PasswordInput minLength={6} value={resetPassword} onChange={e => setResetPassword(e.target.value)} required />
           </div>
           <p className="text-xs text-gray-400">O usuário poderá trocar a senha depois pelo próprio acesso.</p>
           <div className="flex gap-3 pt-2">
@@ -112,15 +113,15 @@ export default function UsuariosPage() {
         <form onSubmit={handleSelfChange} className="space-y-4">
           <div>
             <label className="label">Senha atual *</label>
-            <input type="password" className="input" value={selfForm.oldPassword} onChange={e => setSelfForm(f => ({...f, oldPassword: e.target.value}))} required />
+            <PasswordInput value={selfForm.oldPassword} onChange={e => setSelfForm(f => ({...f, oldPassword: e.target.value}))} required />
           </div>
           <div>
             <label className="label">Nova senha *</label>
-            <input type="password" className="input" minLength={6} value={selfForm.newPassword} onChange={e => setSelfForm(f => ({...f, newPassword: e.target.value}))} required />
+            <PasswordInput minLength={6} value={selfForm.newPassword} onChange={e => setSelfForm(f => ({...f, newPassword: e.target.value}))} required />
           </div>
           <div>
             <label className="label">Confirmar nova senha *</label>
-            <input type="password" className="input" minLength={6} value={selfForm.confirmPassword} onChange={e => setSelfForm(f => ({...f, confirmPassword: e.target.value}))} required />
+            <PasswordInput minLength={6} value={selfForm.confirmPassword} onChange={e => setSelfForm(f => ({...f, confirmPassword: e.target.value}))} required />
           </div>
           {selfError && <p className="text-sm text-red-500">{selfError}</p>}
           <div className="flex gap-3 pt-2">
