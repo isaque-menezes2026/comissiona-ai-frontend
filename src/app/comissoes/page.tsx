@@ -158,6 +158,12 @@ export default function ComissoesPage() {
 
   const selectableCount = visibleCommissions.filter(isSelectable).length
 
+  // Totais da lista visível (respeita a aba de status/filtro selecionada e os
+  // filtros de beneficiário/vencimento ativos) — exibido no rodapé da tabela
+  // abaixo, pra somar rapidamente sem precisar somar linha por linha manualmente.
+  const totalVendaVisivel = visibleCommissions.reduce((sum, c: any) => sum + Number(c.saleItem?.netValue || 0), 0)
+  const totalComissaoVisivel = visibleCommissions.reduce((sum, c: any) => sum + Number(c.amount || 0), 0)
+
   // Total vendido (com base nos itens de venda por trás das comissões listadas).
   // Deduplicado por saleItemId: um mesmo item de venda pode gerar mais de uma
   // comissão (ex: 1ª e 3ª mensalidade, vendedor + parceiro), então somar direto
@@ -446,6 +452,19 @@ export default function ComissoesPage() {
                 </Tr>
               )
             })}
+            <Tr className="bg-gray-50 !cursor-default hover:!bg-gray-50">
+              <Td className="!py-3" />
+              <Td className="!py-3" colSpan={4}>
+                <div className="font-semibold text-gray-900 text-sm">Total ({visibleCommissions.length} registro{visibleCommissions.length === 1 ? '' : 's'})</div>
+              </Td>
+              <Td className="!py-3">
+                <div className="font-bold text-gray-900">{money(totalVendaVisivel)}</div>
+              </Td>
+              <Td className="!py-3">
+                <div className="font-bold text-gray-900">{money(totalComissaoVisivel)}</div>
+              </Td>
+              <Td className="!py-3" colSpan={2} />
+            </Tr>
           </Table>
         )}
       </div>
