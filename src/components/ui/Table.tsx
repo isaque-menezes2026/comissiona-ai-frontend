@@ -14,9 +14,9 @@ export default function Table({ headers, children, empty }: Props) {
     </div>
   )
 }
-export function Tr({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
-  return <tr onClick={onClick} className={`border-b border-gray-50 hover:bg-gray-50/50 transition-colors ${onClick ? 'cursor-pointer' : ''}`}>{children}</tr>
+export function Tr({ children, onClick, className = '' }: { children: React.ReactNode; onClick?: () => void; className?: string }) {
+  return <tr onClick={onClick} className={`border-b border-gray-50 hover:bg-gray-50/50 transition-colors ${onClick ? 'cursor-pointer' : ''} ${className}`}>{children}</tr>
 }
-export function Td({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <td className={`px-4 py-3.5 text-gray-700 ${className}`}>{children}</td>
+export function Td({ children, className = '', colSpan }: { children: React.ReactNode; className?: string; colSpan?: number }) {
+  return <td colSpan={colSpan} className={`px-4 py-3.5 text-gray-700 ${className}`}>{children}</td>
 }
