@@ -181,12 +181,12 @@ export default function ComissoesPage() {
   // atual) por vendedor/parceiro/colaborador, somando por status. Cancelada não
   // entra no total, mas mostro à parte pra dar transparência de quanto foi
   // cancelado daquele beneficiário.
-  const beneficiaryMap = new Map<string, { key: string; name: string; type: string; predicted: number; blocked: number; released: number; paid: number; cancelled: number; overdue: number; dueThisMonth: number; total: number; count: number }>()
+  const beneficiaryMap = new Map<string, { key: string; name: string; type: string; predicted: number; blocked: number; released: number; paid: number; cancelled: number; cancelledCount: number; overdue: number; dueThisMonth: number; total: number; count: number }>()
   allCommissions.forEach((c: any) => {
     const bk = beneficiaryKey(c)
     if (!bk) return
     if (!beneficiaryMap.has(bk.key)) {
-      beneficiaryMap.set(bk.key, { key: bk.key, name: bk.name, type: bk.type, predicted: 0, blocked: 0, released: 0, paid: 0, cancelled: 0, overdue: 0, dueThisMonth: 0, total: 0, count: 0 })
+      beneficiaryMap.set(bk.key, { key: bk.key, name: bk.name, type: bk.type, predicted: 0, blocked: 0, released: 0, paid: 0, cancelled: 0, cancelledCount: 0, overdue: 0, dueThisMonth: 0, total: 0, count: 0 })
     }
     const entry = beneficiaryMap.get(bk.key)!
     const amount = Number(c.amount || 0)
@@ -194,7 +194,7 @@ export default function ComissoesPage() {
     else if (c.status === 'BLOCKED') entry.blocked += amount
     else if (c.status === 'RELEASED') entry.released += amount
     else if (c.status === 'PAID') entry.paid += amount
-    else if (c.status === 'CANCELLED') entry.cancelled += amount
+    else if (c.status === 'CANCELLED') { entry.cancelled += amount; entry.cancelledCount += 1 }
     if (isOverdue(c)) entry.overdue += amount
     if (isDueThisMonth(c)) entry.dueThisMonth += amount
     if (c.status !== 'CANCELLED') { entry.total += amount; entry.count += 1 }
@@ -303,6 +303,7 @@ export default function ComissoesPage() {
             <div>
               <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Resumo por Beneficiário</div>
               <div className="text-xs text-gray-400">Considera todas as comissões, independente do filtro de status abaixo — clique numa linha pra filtrar a tabela por essa pessoa</div>
+              <div className="text-xs text-gray-400 mt-1">O <span className="font-medium text-gray-500">Total</span> soma tudo que <span className="font-medium">não</span> foi cancelado (previstas + liberadas + vencidas + pagas). Comissões canceladas aparecem à parte, <span className="font-medium">não entram no total</span>.</div>
             </div>
             {beneficiaryFilter && (
               <button type="button" onClick={() => setBeneficiaryFilter('')} className="text-xs text-blue-600 hover:underline">
@@ -327,7 +328,14 @@ export default function ComissoesPage() {
                 <Td>{b.paid > 0 ? <span className="text-green-600 font-medium">{money(b.paid)}</span> : <span className="text-gray-300">—</span>}</Td>
                 <Td>
                   <div className="font-semibold text-gray-900">{money(b.total)}</div>
-                  <div className="text-xs text-gray-400">{b.count} comissão(ões){b.cancelled > 0 ? ` · ${money(b.cancelled)} cancelado` : ''}</div>
+                  <div className="text-xs text-gray-400">{b.count} {b.count === 1 ? 'comissão ativa' : 'comissões ativas'}</div>
+                  {b.cancelled > 0 && (
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      <span className="line-through">{money(b.cancelled)}</span>{' '}
+                      em {b.cancelledCount} cancelada{b.cancelledCount === 1 ? '' : 's'}{' '}
+                      <span className="text-gray-300">(não entra no total)</span>
+                    </div>
+                  )}
                 </Td>
               </Tr>
             ))}
