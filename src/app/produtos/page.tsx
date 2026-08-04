@@ -7,12 +7,15 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
 import Modal from '@/components/ui/Modal'
 
+const emptyForm = () => ({ type: 'MAIN', hasMonthly: true, generatesCommission: true, active: true })
+
 export default function ProdutosPage() {
   const [products, setProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState<any>({ type: 'MAIN', hasMonthly: true, generatesCommission: true, active: true })
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [form, setForm] = useState<any>(emptyForm())
 
   const load = () => {
     setLoading(true)
@@ -21,10 +24,47 @@ export default function ProdutosPage() {
 
   useEffect(() => { load() }, [])
 
+  const openNew = () => {
+    setEditingId(null)
+    setForm(emptyForm())
+    setShowModal(true)
+  }
+
+  // Abre o modal já preenchido para editar um produto ou módulo existente.
+  // Só carrega os campos editáveis (não manda id/tenantId/modules/datas de volta).
+  const openEdit = (p: any) => {
+    setEditingId(p.id)
+    setForm({
+      name: p.name || '',
+      description: p.description || '',
+      type: p.type || 'MAIN',
+      parentId: p.parentId || '',
+      color: p.color || '',
+      hasMonthly: !!p.hasMonthly,
+      hasImplantation: !!p.hasImplantation,
+      generatesCommission: !!p.generatesCommission,
+      allowsUpsell: !!p.allowsUpsell,
+      allowsCrossSell: !!p.allowsCrossSell,
+      active: p.active !== false,
+    })
+    setShowModal(true)
+  }
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true)
-    try { await api.post('/products', form); setShowModal(false); setForm({ type: 'MAIN', hasMonthly: true, generatesCommission: true, active: true }); load() }
-    catch (err: any) { alert(err.response?.data?.message || 'Erro') }
+    try {
+      const payload = { ...form, parentId: form.parentId || null }
+      if (editingId) {
+        await api.patch(`/products/${editingId}`, payload)
+      } else {
+        await api.post('/products', payload)
+      }
+      setShowModal(false)
+      setEditingId(null)
+      setForm(emptyForm())
+      load()
+    }
+    catch (err: any) { alert(err.response?.data?.message || 'Erro ao salvar produto') }
     finally { setSaving(false) }
   }
 
@@ -32,10 +72,10 @@ export default function ProdutosPage() {
 
   return (
     <div>
-      <PageHeader title="Produtos" description="Catalogo de produtos e modulos" action={<button onClick={() => setShowModal(true)} className="btn-primary">+ Novo Produto</button>} />
+      <PageHeader title="Produtos" description="Catalogo de produtos e modulos" action={<button onClick={openNew} className="btn-primary">+ Novo Produto</button>} />
 
       {products.length === 0 ? (
-        <div className="card"><EmptyState icon="📦" title="Nenhum produto cadastrado" action={<button onClick={() => setShowModal(true)} className="btn-primary">Novo Produto</button>} /></div>
+        <div className="card"><EmptyState icon="📦" title="Nenhum produto cadastrado" action={<button onClick={openNew} className="btn-primary">Novo Produto</button>} /></div>
       ) : (
         <div className="space-y-4">
           {products.map(p => (
@@ -55,6 +95,7 @@ export default function ProdutosPage() {
                     {p.generatesCommission && <span className="text-xs bg-green-50 text-green-600 px-2 py-0.5 rounded">Gera Comissao</span>}
                   </div>
                 </div>
+                <button onClick={() => openEdit(p)} className="text-xs font-medium text-blue-600 hover:text-blue-700 border border-blue-200 hover:border-blue-300 rounded-lg px-2.5 py-1 shrink-0" title="Editar produto">✎ Editar</button>
               </div>
               {p.modules?.length > 0 && (
                 <div className="mt-4 border-t border-gray-50 pt-4">
@@ -65,6 +106,7 @@ export default function ProdutosPage() {
                         <div className="w-2 h-2 rounded-full bg-purple-400" />
                         <span className="text-sm text-gray-700">{m.name}</span>
                         {!m.active && <span className="text-xs text-gray-400">(inativo)</span>}
+                        <button onClick={() => openEdit(m)} className="text-blue-500 hover:text-blue-700 text-xs ml-1" title="Editar modulo">✎</button>
                       </div>
                     ))}
                   </div>
@@ -75,7 +117,7 @@ export default function ProdutosPage() {
         </div>
       )}
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title="Novo Produto">
+      <Modal open={showModal} onClose={() => { setShowModal(false); setEditingId(null) }} title={editingId ? 'Editar Produto' : 'Novo Produto'}>
         <form onSubmit={handleSave} className="space-y-4">
           <div>
             <label className="label">Nome *</label>
@@ -99,12 +141,12 @@ export default function ProdutosPage() {
               <label className="label">Produto Pai (se modulo)</label>
               <select className="input" value={form.parentId || ''} onChange={e => setForm((f: any) => ({...f, parentId: e.target.value || null}))}>
                 <option value="">Nenhum</option>
-                {products.filter(p => p.type === 'MAIN').map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {products.filter(p => p.type === 'MAIN' && p.id !== editingId).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
           </div>
           <div className="flex flex-wrap gap-4">
-            {[['hasMonthly','Tem Mensalidade'],['hasImplantation','Tem Implantacao'],['generatesCommission','Gera Comissao'],['allowsUpsell','Permite Upsell']].map(([key, label]) => (
+            {[['hasMonthly','Tem Mensalidade'],['hasImplantation','Tem Implantacao'],['generatesCommission','Gera Comissao'],['allowsUpsell','Permite Upsell'],['active','Ativo']].map(([key, label]) => (
               <label key={key} className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={form[key] || false} onChange={e => setForm((f: any) => ({...f, [key]: e.target.checked}))} />
                 {label}
@@ -112,8 +154,8 @@ export default function ProdutosPage() {
             ))}
           </div>
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setShowModal(false)} className="btn-secondary flex-1">Cancelar</button>
-            <button type="submit" disabled={saving} className="btn-primary flex-1">{saving ? 'Salvando...' : 'Criar'}</button>
+            <button type="button" onClick={() => { setShowModal(false); setEditingId(null) }} className="btn-secondary flex-1">Cancelar</button>
+            <button type="submit" disabled={saving} className="btn-primary flex-1">{saving ? 'Salvando...' : editingId ? 'Salvar alteracoes' : 'Criar'}</button>
           </div>
         </form>
       </Modal>

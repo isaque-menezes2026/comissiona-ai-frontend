@@ -316,9 +316,9 @@ export default function MetasPage() {
                     </div>
                     {!g.isComposed && (
                       <>
-                        <button onClick={() => openDuplicateModal(g)} className="text-gray-300 hover:text-blue-500 text-sm" title="Duplicar para outros períodos">⧉</button>
-                        <button onClick={() => openEditModal(g)} className="text-gray-300 hover:text-blue-500 text-sm" title="Editar">✎</button>
-                        <button onClick={() => handleDelete(g.id)} className="text-gray-300 hover:text-red-500 text-sm" title="Excluir">×</button>
+                        <button onClick={() => openDuplicateModal(g)} className="text-gray-400 hover:text-blue-600 text-base px-1" title="Duplicar para outros períodos">⧉</button>
+                        <button onClick={() => openEditModal(g)} className="text-xs font-medium text-blue-600 hover:text-blue-700 border border-blue-200 hover:border-blue-300 rounded-lg px-2.5 py-1" title="Editar meta">✎ Editar</button>
+                        <button onClick={() => handleDelete(g.id)} className="text-gray-400 hover:text-red-600 text-base px-1" title="Excluir">×</button>
                       </>
                     )}
                   </div>
